@@ -2050,6 +2050,17 @@ static struct config_bool ConfigureNamesBool[] =
 		false,
 		NULL, NULL, NULL
 	},
+#ifdef USE_SECURETRANSPORT
+	{
+		{"ssl_keychain_use_default", PGC_SIGHUP, CONN_AUTH_SSL,
+			gettext_noop("Allow using the default Keychain of the current user."),
+			NULL
+		},
+		&ssl_keychain_use_default,
+		false,
+		NULL, NULL, NULL
+	},
+#endif
 
 	{
 		{"wal_receiver_create_temp_slot", PGC_SIGHUP, REPLICATION_STANDBY,
@@ -4298,6 +4309,18 @@ static struct config_string ConfigureNamesString[] =
 		"",
 		NULL, NULL, NULL
 	},
+
+#ifdef USE_SECURETRANSPORT
+	{
+		{"ssl_keychain_file", PGC_SIGHUP, CONN_AUTH_SSL,
+			gettext_noop("Location of the Keychain file."),
+			NULL
+		},
+		&ssl_keychain_file,
+		"",
+		NULL, NULL, NULL
+	},
+#endif
 
 	{
 		{"stats_temp_directory", PGC_SIGHUP, STATS_COLLECTOR,

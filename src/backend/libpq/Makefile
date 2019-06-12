@@ -36,4 +36,9 @@ ifeq ($(with_gssapi),yes)
 OBJS += be-gssapi-common.o be-secure-gssapi.o
 endif
 
+ifeq ($(with_securetransport),yes)
+OBJS += be-secure-securetransport.o
+override CFLAGS += -framework Security -framework CoreFoundation
+endif
+
 include $(top_srcdir)/src/backend/common.mk

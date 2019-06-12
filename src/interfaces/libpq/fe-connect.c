@@ -354,6 +354,20 @@ static const internalPQconninfoOption PQconninfoOptions[] = {
 		"Target-Session-Attrs", "", 11, /* sizeof("read-write") = 11 */
 	offsetof(struct pg_conn, target_session_attrs)},
 
+	{"sslpassword", NULL, NULL, NULL,
+		"SSL-Client-Key-Password", "*", 20,
+	offsetof(struct pg_conn, sslpassword)},
+
+#if defined(USE_SECURETRANSPORT)
+	{"keychain_use_default", NULL, NULL, NULL,
+		"UseDefaultKeychain", "", 1,
+	offsetof(struct pg_conn, keychain_use_default)},
+
+	{"keychain", "PGKEYCHAIN", NULL, NULL,
+		"Keychain", "", 64,
+	offsetof(struct pg_conn, keychain)},
+#endif
+
 	/* Terminating entry --- MUST BE LAST */
 	{NULL, NULL, NULL, NULL,
 	NULL, NULL, 0}
@@ -464,6 +478,9 @@ pqDropConnection(PGconn *conn, bool flushInput)
 	if (conn->sock != PGINVALID_SOCKET)
 		closesocket(conn->sock);
 	conn->sock = PGINVALID_SOCKET;
+#ifdef USE_SECURETRANSPORT
+	conn->keychain_use_default = true;
+#endif
 
 	/* Optionally discard any unread data */
 	if (flushInput)
@@ -4073,6 +4090,14 @@ freePGconn(PGconn *conn)
 		gss_delete_sec_context(&minor, &conn->gctx, GSS_C_NO_BUFFER);
 		conn->gctx = NULL;
 	}
+#endif
+#if defined(ENABLE_GSS) && defined(ENABLE_SSPI)
+	if (conn->gsslib)
+		free(conn->gsslib);
+#endif
+#ifdef USE_SECURETRANSPORT
+	if (conn->keychain)
+		free(conn->keychain);
 #endif
 	/* Note that conn->Pfdebug is not ours to close or free */
 	if (conn->last_query)

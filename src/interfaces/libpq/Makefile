@@ -57,6 +57,11 @@ OBJS += \
 	fe-secure-gssapi.o
 endif
 
+ifeq ($(with_securetransport), yes)
+OBJS += fe-secure-securetransport.o
+override CFLAGS += -framework Security -framework CoreFoundation -fconstant-cfstrings
+endif
+
 ifeq ($(PORTNAME), cygwin)
 override shlib = cyg$(NAME)$(DLSUFFIX)
 endif

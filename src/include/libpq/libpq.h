@@ -88,6 +88,10 @@ extern PGDLLIMPORT bool ssl_passphrase_command_supports_reload;
 #ifdef USE_SSL
 extern bool ssl_loaded_verify_locations;
 #endif
+#ifdef USE_SECURETRANSPORT
+extern char *ssl_keychain_file;
+extern bool	ssl_keychain_use_default;
+#endif
 
 extern int	secure_initialize(bool isServerStart);
 extern bool secure_loaded_verify_locations(void);
