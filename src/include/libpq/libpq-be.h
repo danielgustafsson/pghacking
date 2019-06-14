@@ -200,8 +200,8 @@ typedef struct Port
 	bool		peer_cert_valid;
 
 	/*
-	 * OpenSSL structures. (Keep these last so that the locations of other
-	 * fields are the same whether or not you build with OpenSSL.)
+	 * SSL library structures. (Keep these last so that the locations of
+	 * other fields are the same whether or not you build with SSL.)
 	 */
 #ifdef USE_OPENSSL
 	SSL		   *ssl;
@@ -248,7 +248,7 @@ fDKQXkYuNs474553LBgOhgObJ4Oi7Aeij7XFXfBvTFLJ3ivL9pVYFxg5lUl86pVq\n\
 
 /*
  * These functions are implemented by the glue code specific to each
- * SSL implementation (e.g. be-secure-openssl.c)
+ * SSL implementation (e.g. be-secure-<implementation>.c)
  */
 
 /*
