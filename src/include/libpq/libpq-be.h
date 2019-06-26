@@ -30,6 +30,12 @@
  * instead of the actual Secure Transport variables and perform type casting
  * in the Secure Transport implementation.
  */
+#elif USE_NSS
+/*
+#include <nspr.h>
+#include <nss.h>
+#include <ssl.h>
+*/
 #endif
 #ifdef HAVE_NETINET_TCP_H
 #include <netinet/tcp.h>
@@ -222,6 +228,9 @@ typedef struct Port
 	 */
 	int			ssl_buffered;
 	int			waitfor;
+#elif USE_NSS
+	void	   *ssl;
+	void	   *pr_fd;
 #endif
 } Port;
 

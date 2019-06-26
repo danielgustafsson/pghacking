@@ -4263,7 +4263,13 @@ static struct config_string ConfigureNamesString[] =
 		},
 		&ssl_library,
 #ifdef USE_SSL
+#if defined(USE_OPENSSL)
 		"OpenSSL",
+#elif defined(USE_NSS)
+		"NSS",
+#elif defined(USE_SECURETRANSPORT)
+		"Secure Transport",
+#endif
 #else
 		"",
 #endif
@@ -4317,6 +4323,18 @@ static struct config_string ConfigureNamesString[] =
 			NULL
 		},
 		&ssl_keychain_file,
+		"",
+		NULL, NULL, NULL
+	},
+#endif
+
+#ifdef USE_NSS
+	{
+		{"ssl_database", PGC_SIGHUP, CONN_AUTH_SSL,
+			gettext_noop("Location of the NSS certificate database."),
+			NULL
+		},
+		&ssl_database,
 		"",
 		NULL, NULL, NULL
 	},

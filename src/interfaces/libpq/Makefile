@@ -62,6 +62,10 @@ OBJS += fe-secure-securetransport.o
 override CFLAGS += -framework Security -framework CoreFoundation -fconstant-cfstrings
 endif
 
+ifeq ($(with_nss), yes)
+OBJS += fe-secure-nss.o
+endif
+
 ifeq ($(PORTNAME), cygwin)
 override shlib = cyg$(NAME)$(DLSUFFIX)
 endif

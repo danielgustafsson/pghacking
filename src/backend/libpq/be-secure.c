@@ -49,6 +49,9 @@ bool		ssl_passphrase_command_supports_reload;
 char       *ssl_keychain_file;
 bool		ssl_keychain_use_default = false;
 #endif
+#ifdef USE_NSS
+char	   *ssl_database;
+#endif
 
 #ifdef USE_SSL
 bool		ssl_loaded_verify_locations = false;

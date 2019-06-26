@@ -92,6 +92,9 @@ extern bool ssl_loaded_verify_locations;
 extern char *ssl_keychain_file;
 extern bool	ssl_keychain_use_default;
 #endif
+#ifdef USE_NSS
+extern char *ssl_database;
+#endif
 
 extern int	secure_initialize(bool isServerStart);
 extern bool secure_loaded_verify_locations(void);

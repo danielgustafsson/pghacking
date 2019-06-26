@@ -897,6 +897,9 @@
    macOS 10.13 High Sierra) */
 #undef HAVE_KTLSPROTOCOL13
 
+/* Define to build with NSS support (--with-nss) */
+#undef USE_NSS
+
 /* Define to 1 to use software CRC-32C implementation (slicing-by-8). */
 #undef USE_SLICING_BY_8_CRC32C
 

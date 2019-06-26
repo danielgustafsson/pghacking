@@ -368,6 +368,12 @@ static const internalPQconninfoOption PQconninfoOptions[] = {
 	offsetof(struct pg_conn, keychain)},
 #endif
 
+#if defined(USE_NSS)
+	{"cert_database", NULL, NULL, NULL,
+		"CertificateDatabase", "", 64,
+	offsetof(struct pg_conn, cert_database)},
+#endif
+
 	/* Terminating entry --- MUST BE LAST */
 	{NULL, NULL, NULL, NULL,
 	NULL, NULL, 0}

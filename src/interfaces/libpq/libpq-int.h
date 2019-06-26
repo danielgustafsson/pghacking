@@ -496,6 +496,11 @@ struct pg_conn
 	int			ssl_key_bits;
 #endif   /* USE_SECURETRANSPORT */
 
+#ifdef USE_NSS
+	char	   *cert_database;
+	void	   *pr_fd;
+#endif /* USE_NSS */
+
 #endif   /* USE_SSL */
 
 #ifdef ENABLE_GSS
