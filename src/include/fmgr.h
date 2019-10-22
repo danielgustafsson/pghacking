@@ -18,6 +18,8 @@
 #ifndef FMGR_H
 #define FMGR_H
 
+#include "access/detoast.h"
+
 /* We don't want to include primnodes.h here, so make some stub references */
 typedef struct Node *fmNodePtr;
 typedef struct Aggref *fmAggrefPtr;
@@ -232,7 +234,16 @@ extern void fmgr_symbol(Oid functionId, char **mod, char **fn);
  * Note: it'd be nice if these could be macros, but I see no way to do that
  * without evaluating the arguments multiple times, which is NOT acceptable.
  */
-extern struct varlena *pg_detoast_datum(struct varlena *datum);
+extern struct varlena *heap_tuple_untoast_attr(struct varlena *attr);
+
+static inline struct varlena *
+pg_detoast_datum(struct varlena *datum)
+{
+	if (VARATT_IS_EXTENDED(datum))
+		return detoast_attr(datum);
+	else
+		return datum;
+}
 extern struct varlena *pg_detoast_datum_copy(struct varlena *datum);
 extern struct varlena *pg_detoast_datum_slice(struct varlena *datum,
 											  int32 first, int32 count);
