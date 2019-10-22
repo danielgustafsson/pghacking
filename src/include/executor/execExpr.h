@@ -856,7 +856,8 @@ typedef struct JsonConstructorExprState
 
 /* functions in execExprInterp.c */
 extern void ExecReadyInterpretedExpr(ExprState *state, ExprStateBuilder *esb);
-extern ExprEvalOp ExecEvalStepOp(ExprState *state, ExprEvalStep *op);
+extern ExprEvalOp ExecEvalStepOp(ExprState *state, const ExprEvalStep *op);
+extern const char* ExprOpToString(ExprEvalOp op);
 
 extern Datum ExecInterpExprStillValid(ExprState *state, ExprContext *econtext, bool *isNull);
 extern void CheckExprStillValid(ExprState *state, ExprContext *econtext);

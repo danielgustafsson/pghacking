@@ -2381,7 +2381,7 @@ ExecInitInterpreter(void)
  * decipherable. This function returns the appropriate enum member.
  */
 ExprEvalOp
-ExecEvalStepOp(ExprState *state, ExprEvalStep *op)
+ExecEvalStepOp(ExprState *state, const ExprEvalStep *op)
 {
 #if defined(EEO_USE_COMPUTED_GOTO)
 	if (state->flags & EEO_FLAG_DIRECT_THREADED)
