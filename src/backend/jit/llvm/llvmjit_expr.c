@@ -183,6 +183,21 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 	LLVMSetVisibility(ecs.fn, LLVMDefaultVisibility);
 	llvm_copy_attributes(AttributeTemplate, ecs.fn);
 
+	{
+		int			id = LLVMGetEnumAttributeKindForName("noalias", sizeof("noalias") - 1);
+		LLVMAttributeRef attr;
+
+		attr = LLVMCreateEnumAttribute(LLVMGetGlobalContext(), id, 0);
+
+		/*
+		 * Cannot currently legally be set on first argument (the expression
+		 * itself), there likely are "outgoing" pointers that alias from
+		 * within expression steps.
+		 */
+		LLVMAddAttributeAtIndex(ecs.fn, 2, attr);
+		LLVMAddAttributeAtIndex(ecs.fn, 3, attr);
+	}
+
 	ecs.b_entry = LLVMAppendBasicBlock(ecs.fn, "entry");
 	LLVMPositionBuilderAtEnd(b, ecs.b_entry);
 
