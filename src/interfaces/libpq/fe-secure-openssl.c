@@ -30,6 +30,7 @@
 #include "fe-auth.h"
 #include "fe-secure-common.h"
 #include "libpq-int.h"
+#include "common/openssl.h"
 
 #ifdef WIN32
 #include "win32.h"
@@ -95,6 +96,7 @@ static long win32_ssl_create_mutex = 0;
 #endif							/* ENABLE_THREAD_SAFETY */
 
 static PQsslKeyPassHook_type PQsslKeyPassHook = NULL;
+static int ssl_protocol_version_to_openssl(const char *protocol);
 
 /* ------------------------------------------------------------ */
 /*			 Procedures common to all secure sessions			*/
@@ -787,6 +789,8 @@ initialize_SSL(PGconn *conn)
 	bool		have_cert;
 	bool		have_rootcert;
 	EVP_PKEY   *pkey = NULL;
+	int			ssl_max_ver;
+	int			ssl_min_ver;
 
 	/*
 	 * We'll need the home directory if any of the relevant parameters are
@@ -842,6 +846,52 @@ initialize_SSL(PGconn *conn)
 
 	/* Disable old protocol versions */
 	SSL_CTX_set_options(SSL_context, SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
+
+	if (conn->sslminprotocolversion && strlen(conn->sslminprotocolversion) > 0)
+	{
+		ssl_min_ver = ssl_protocol_version_to_openssl(conn->sslminprotocolversion);
+
+		if (ssl_min_ver == -1)
+		{
+			printfPQExpBuffer(&conn->errorMessage,
+							  libpq_gettext("invalid minimum protocol version specified: %s\n"),
+							  conn->sslminprotocolversion);
+			return -1;
+		}
+
+		if (!SSL_CTX_set_min_proto_version(SSL_context, ssl_min_ver))
+		{
+			char	   *err = SSLerrmessage(ERR_get_error());
+
+			printfPQExpBuffer(&conn->errorMessage,
+							  libpq_gettext("unable to set minimum protocol version specified: %s\n"),
+							  err);
+			return -1;
+		}
+	}
+
+	if (conn->sslmaxprotocolversion && strlen(conn->sslmaxprotocolversion) > 0)
+	{
+		ssl_max_ver = ssl_protocol_version_to_openssl(conn->sslmaxprotocolversion);
+
+		if (ssl_max_ver == -1)
+		{
+			printfPQExpBuffer(&conn->errorMessage,
+							  libpq_gettext("invalid or unsupported maximum protocol version specified: %s\n"),
+							  conn->sslmaxprotocolversion);
+			return -1;
+		}
+
+		if (!SSL_CTX_set_max_proto_version(SSL_context, ssl_max_ver))
+		{
+			char	   *err = SSLerrmessage(ERR_get_error());
+
+			printfPQExpBuffer(&conn->errorMessage,
+							  libpq_gettext("unable to set maximum SSL version specified: %s\n"),
+							  err);
+			return -1;
+		}
+	}
 
 	/*
 	 * Disable OpenSSL's moving-write-buffer sanity check, because it causes
@@ -1658,4 +1708,35 @@ PQssl_passwd_cb(char *buf, int size, int rwflag, void *userdata)
 		return PQsslKeyPassHook(buf, size, conn);
 	else
 		return PQdefaultSSLKeyPassHook(buf, size, conn);
+}
+
+/*
+ * Convert TLS protocol version string to OpenSSL values
+ *
+ * If a version is passed that is not supported by the current OpenSSL version,
+ * then we return -1. If a nonnegative value is returned, subsequent code can
+ * assume it's working with a supported version.
+ */
+static int
+ssl_protocol_version_to_openssl(const char *protocol)
+{
+	if (pg_strcasecmp("TLSv1", protocol) == 0)
+		return TLS1_VERSION;
+
+#ifdef TLS1_1_VERSION
+	if (pg_strcasecmp("TLSv1.1", protocol) == 0)
+		return TLS1_1_VERSION;
+#endif
+
+#ifdef TLS1_2_VERSION
+	if (pg_strcasecmp("TLSv1.2", protocol) == 0)
+		return TLS1_2_VERSION;
+#endif
+
+#ifdef TLS1_3_VERSION
+	if (pg_strcasecmp("TLSv1.3", protocol) == 0)
+		return TLS1_3_VERSION;
+#endif
+
+	return -1;
 }

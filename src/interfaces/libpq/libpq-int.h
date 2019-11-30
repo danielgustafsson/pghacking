@@ -367,6 +367,8 @@ struct pg_conn
 	char	   *krbsrvname;		/* Kerberos service name */
 	char	   *gsslib;			/* What GSS library to use ("gssapi" or
 								 * "sspi") */
+	char	   *sslminprotocolversion;	/* minimum TLS protocol version */
+	char	   *sslmaxprotocolversion;	/* maximum TLS protocol version */
 
 	/* Type of connection to make.  Possible values: any, read-write. */
 	char	   *target_session_attrs;
@@ -682,6 +684,8 @@ extern ssize_t pqsecure_read(PGconn *, void *ptr, size_t len);
 extern ssize_t pqsecure_write(PGconn *, const void *ptr, size_t len);
 extern ssize_t pqsecure_raw_read(PGconn *, void *ptr, size_t len);
 extern ssize_t pqsecure_raw_write(PGconn *, const void *ptr, size_t len);
+extern bool pq_verify_ssl_protocol_option(const char *protocolversion);
+extern bool pq_verify_ssl_protocol_range(const char *min, const char *max);
 
 #if defined(ENABLE_THREAD_SAFETY) && !defined(WIN32)
 extern int	pq_block_sigpipe(sigset_t *osigset, bool *sigpipe_pending);

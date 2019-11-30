@@ -320,6 +320,14 @@ static const internalPQconninfoOption PQconninfoOptions[] = {
 		"Require-Peer", "", 10,
 	offsetof(struct pg_conn, requirepeer)},
 
+	{"sslminprotocolversion", "PGSSLMINPROTOCOLVERSION", NULL, NULL,
+		"SSL-Minimum-Protocol-Version", "",  /* sizeof("TLSv1.x") */ 7,
+	offsetof(struct pg_conn, sslminprotocolversion)},
+
+	{"sslmaxprotocolversion", "PGSSLMAXPROTOCOLVERSION", NULL, NULL,
+		"SSL-Maximum-Protocol-Version", "", /* sizeof("TLSv1.x") */ 7,
+	offsetof(struct pg_conn, sslmaxprotocolversion)},
+
 	/*
 	 * As with SSL, all GSS options are exposed even in builds that don't have
 	 * support.
@@ -1283,6 +1291,38 @@ connectOptions2(PGconn *conn)
 		conn->sslmode = strdup(DefaultSSLMode);
 		if (!conn->sslmode)
 			goto oom_error;
+	}
+
+	/*
+	 * Validate TLS protocol options sslminprotocolversion and
+	 * sslmaxprotocolversion.
+	 */
+	if (conn->sslminprotocolversion
+		&& !pq_verify_ssl_protocol_option(conn->sslminprotocolversion))
+	{
+		printfPQExpBuffer(&conn->errorMessage,
+						  libpq_gettext("invalid sslminprotocolversion value: \"%s\"\n"),
+						  conn->sslminprotocolversion);
+		return false;
+	}
+	if (conn->sslmaxprotocolversion
+		&& !pq_verify_ssl_protocol_option(conn->sslmaxprotocolversion))
+	{
+		printfPQExpBuffer(&conn->errorMessage,
+						  libpq_gettext("invalid sslmaxprotocolversion value: \"%s\"\n"),
+						  conn->sslmaxprotocolversion);
+		return false;
+	}
+
+	if (conn->sslminprotocolversion && conn->sslmaxprotocolversion)
+	{
+		if (!pq_verify_ssl_protocol_range(conn->sslminprotocolversion,
+										  conn->sslmaxprotocolversion))
+		{
+			printfPQExpBuffer(&conn->errorMessage,
+						  libpq_gettext("invalid protocol version range"));
+			return false;
+		}
 	}
 
 	/*
@@ -4001,6 +4041,10 @@ freePGconn(PGconn *conn)
 		free(conn->sslcompression);
 	if (conn->requirepeer)
 		free(conn->requirepeer);
+	if (conn->sslminprotocolversion)
+		free(conn->sslminprotocolversion);
+	if (conn->sslmaxprotocolversion)
+		free(conn->sslmaxprotocolversion);
 	if (conn->gssencmode)
 		free(conn->gssencmode);
 	if (conn->krbsrvname)

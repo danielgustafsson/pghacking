@@ -555,3 +555,53 @@ pq_reset_sigpipe(sigset_t *osigset, bool sigpipe_pending, bool got_epipe)
 }
 
 #endif							/* ENABLE_THREAD_SAFETY && !WIN32 */
+
+bool
+pq_verify_ssl_protocol_option(const char *protocolversion)
+{
+	if (!protocolversion || strlen(protocolversion) == 0)
+		return false;
+
+	if (pg_strcasecmp(protocolversion, "TLSv1") == 0
+		|| pg_strcasecmp(protocolversion, "TLSv1.1") == 0
+		|| pg_strcasecmp(protocolversion, "TLSv1.2") == 0
+		|| pg_strcasecmp(protocolversion, "TLSv1.3") == 0)
+		return true;
+
+	return false;
+}
+
+/*
+ *	Ensure that the protocol range is sane
+ *
+ * Make sure that the maximum version isn't lower than the minimum. The check
+ * is performed on the input string to keep it TLS backend agnostic. Input to
+ * this function is expected verified with pq_verify_ssl_protocol_option, as
+ * the code is not performing errorchecking on the input.
+ */
+bool
+pq_verify_ssl_protocol_range(const char *min, const char *max)
+{
+	/*
+	 * If the minimum version is the lowest one we accept, then all options
+	 * for max are valid.
+	 */
+	if (strlen(min) == strlen("TLSv1"))
+		return true;
+
+	/*
+	 * We know now that the minimum isn't TLSv1, so having that as a max is
+	 * not valid.
+	 */
+	if (strlen(max) == strlen("TLSv1"))
+		return false;
+
+	/*
+	 * At this point we know we have a mix of TLSv1.1 through 1.3 versions, so
+	 * we can work with the properties of the minor rev character.
+	 */
+	if (*(min + strlen("TLSv1.")) > *(max + strlen("TLSv1.")))
+		return false;
+
+	return true;
+}
