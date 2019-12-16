@@ -4507,6 +4507,7 @@ BackendRun(Port *port)
 	 */
 	MemoryContextSwitchTo(TopMemoryContext);
 
+	SyncLocal();
 	PostgresMain(ac, av, port->database_name, port->user_name);
 }
 

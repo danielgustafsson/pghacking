@@ -67,6 +67,9 @@ CATALOG(pg_database,1262,DatabaseRelationId) BKI_SHARED_RELATION BKI_ROWTYPE_OID
 	/* default table space for this DB */
 	Oid			dattablespace BKI_LOOKUP(pg_tablespace);
 
+	/* has checksums been enabled for this DB? */
+	bool		dathaschecksums;
+
 #ifdef CATALOG_VARLEN			/* variable-length fields start here */
 	/* access permissions */
 	aclitem		datacl[1];
@@ -79,5 +82,7 @@ CATALOG(pg_database,1262,DatabaseRelationId) BKI_SHARED_RELATION BKI_ROWTYPE_OID
  * ----------------
  */
 typedef FormData_pg_database *Form_pg_database;
+
+extern void UnsetDatabaseChecksumsFlag(void);
 
 #endif							/* PG_DATABASE_H */

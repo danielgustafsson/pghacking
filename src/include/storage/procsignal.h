@@ -47,12 +47,9 @@ typedef enum
 
 typedef enum
 {
-	/*
-	 * XXX. PROCSIGNAL_BARRIER_PLACEHOLDER should be replaced when the first
-	 * real user of the ProcSignalBarrier mechanism is added. It's just here
-	 * for now because we can't have an empty enum.
-	 */
-	PROCSIGNAL_BARRIER_PLACEHOLDER = 0
+	PROCSIGNAL_BARRIER_CHECKSUM_OFF = 0,
+	PROCSIGNAL_BARRIER_CHECKSUM_INPROGRESS,
+	PROCSIGNAL_BARRIER_CHECKSUM_ON
 } ProcSignalBarrierType;
 
 /*

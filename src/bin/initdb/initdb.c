@@ -1412,6 +1412,9 @@ bootstrap_template1(void)
 	bki_lines = replace_token(bki_lines, "LC_CTYPE",
 							  escape_quotes_bki(lc_ctype));
 
+	bki_lines = replace_token(bki_lines, "DATHASCHECKSUMS",
+							   data_checksums ? "true" : "false");
+
 	/* Also ensure backend isn't confused by this environment var: */
 	unsetenv("PGCLIENTENCODING");
 
