@@ -489,7 +489,6 @@ AppendAttributeTuples(Relation indexRelation, int numatts)
 	Relation	pg_attribute;
 	CatalogIndexState indstate;
 	TupleDesc	indexTupDesc;
-	int			i;
 
 	/*
 	 * open the attribute relation and its indexes
