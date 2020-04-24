@@ -320,11 +320,11 @@ static const internalPQconninfoOption PQconninfoOptions[] = {
 		"Require-Peer", "", 10,
 	offsetof(struct pg_conn, requirepeer)},
 
-	{"sslminprotocolversion", "PGSSLMINPROTOCOLVERSION", NULL, NULL,
+	{"ssl_min_protocolversion", "PGSSLMINPROTOCOLVERSION", NULL, NULL,
 		"SSL-Minimum-Protocol-Version", "", 8,	/* sizeof("TLSv1.x") == 8 */
 	offsetof(struct pg_conn, sslminprotocolversion)},
 
-	{"sslmaxprotocolversion", "PGSSLMAXPROTOCOLVERSION", NULL, NULL,
+	{"ssl_max_protocolversion", "PGSSLMAXPROTOCOLVERSION", NULL, NULL,
 		"SSL-Maximum-Protocol-Version", "", 8,	/* sizeof("TLSv1.x") == 8 */
 	offsetof(struct pg_conn, sslmaxprotocolversion)},
 
@@ -1301,14 +1301,14 @@ connectOptions2(PGconn *conn)
 	}
 
 	/*
-	 * Validate TLS protocol versions for sslminprotocolversion and
-	 * sslmaxprotocolversion.
+	 * Validate TLS protocol versions for ssl_min_protocolversion and
+	 * ssl_max_protocolversion.
 	 */
 	if (!sslVerifyProtocolVersion(conn->sslminprotocolversion))
 	{
 		conn->status = CONNECTION_BAD;
 		printfPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("invalid sslminprotocolversion value: \"%s\"\n"),
+						  libpq_gettext("invalid ssl_min_protocolversion value: \"%s\"\n"),
 						  conn->sslminprotocolversion);
 		return false;
 	}
@@ -1316,7 +1316,7 @@ connectOptions2(PGconn *conn)
 	{
 		conn->status = CONNECTION_BAD;
 		printfPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("invalid sslmaxprotocolversion value: \"%s\"\n"),
+						  libpq_gettext("invalid ssl_max_protocolversion value: \"%s\"\n"),
 						  conn->sslmaxprotocolversion);
 		return false;
 	}
@@ -7120,7 +7120,7 @@ pgpassfileWarning(PGconn *conn)
 /*
  * Check if the SSL procotol value given in input is valid or not.
  * This is used as a sanity check routine for the connection parameters
- * sslminprotocolversion and sslmaxprotocolversion.
+ * ssl_min_protocolversion and ssl_max_protocolversion.
  */
 static bool
 sslVerifyProtocolVersion(const char *version)

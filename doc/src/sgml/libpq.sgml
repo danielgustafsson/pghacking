@@ -1737,7 +1737,7 @@ postgresql://%2Fvar%2Flib%2Fpostgresql/dbname
      </varlistentry>
 
      <varlistentry id="libpq-connect-sslminprotocolversion" xreflabel="sslminprotocolversion">
-      <term><literal>sslminprotocolversion</literal></term>
+      <term><literal>ssl_min_protocolversion</literal></term>
       <listitem>
        <para>
         This parameter specifies the minimum SSL/TLS protocol version to allow
@@ -1753,7 +1753,7 @@ postgresql://%2Fvar%2Flib%2Fpostgresql/dbname
      </varlistentry>
 
      <varlistentry id="libpq-connect-sslmaxprotocolversion" xreflabel="sslmaxprotocolversion">
-      <term><literal>sslmaxprotocolversion</literal></term>
+      <term><literal>ssl_max_protocolversion</literal></term>
       <listitem>
        <para>
         This parameter specifies the maximum SSL/TLS protocol version to allow
