@@ -335,6 +335,19 @@ main(int argc, char **argv)
 	}
 
 	/*
+	 * The first SET SESSION AUTHORIZATION command will override the SET ROLE
+	 * command, making these options incompatible. SET SESSION AUTHORIZATION
+	 * also insists on the originally authenticed user be a superuser, which
+	 * goes against the usecase for --role which is to start the restore from
+	 * a non-superuser role.
+	 */
+	if (use_setsessauth && opts->use_role)
+	{
+		pg_log_error("options --role and --use-set-session-authorization cannot be used together");
+		exit_nicely(1);
+	}
+
+	/*
 	 * -C is not compatible with -1, because we can't create a database inside
 	 * a transaction block.
 	 */
