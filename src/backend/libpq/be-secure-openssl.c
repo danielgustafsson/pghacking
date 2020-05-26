@@ -873,7 +873,7 @@ load_dh_file(char *filename, bool isServerStart)
  *	Load hardcoded DH parameters.
  *
  *	To prevent problems if the DH parameters files don't even
- *	exist, we can load DH parameters hardcoded into this file.
+ *	exist, we can load hardcoded DH parameters supplied with the backend.
  */
 static DH  *
 load_dh_buffer(const char *buffer, size_t len)
