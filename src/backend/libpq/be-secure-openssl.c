@@ -266,7 +266,7 @@ be_tls_init(bool isServerStart)
 	 */
 	if (ssl_ca_file[0])
 	{
-		if (SSL_CTX_load_verify_locations(context, ssl_ca_file, NULL) != 1 ||
+		if (SSL_CTX_load_verify_file(context, ssl_ca_file) != 1 ||
 			(root_cert_list = SSL_load_client_CA_file(ssl_ca_file)) == NULL)
 		{
 			ereport(isServerStart ? FATAL : LOG,
@@ -289,7 +289,7 @@ be_tls_init(bool isServerStart)
 		if (cvstore)
 		{
 			/* Set the flags to check against the complete CRL chain */
-			if (X509_STORE_load_locations(cvstore, ssl_crl_file, NULL) == 1)
+			if (X509_STORE_load_file(cvstore, ssl_crl_file) == 1)
 			{
 				X509_STORE_set_flags(cvstore,
 									 X509_V_FLAG_CRL_CHECK | X509_V_FLAG_CRL_CHECK_ALL);
@@ -817,7 +817,6 @@ load_dh_file(char *filename, bool isServerStart)
 {
 	FILE	   *fp;
 	DH		   *dh = NULL;
-	int			codes;
 
 	/* attempt to open file.  It's not an error if it doesn't exist. */
 	if ((fp = AllocateFile(filename, "r")) == NULL)
@@ -841,30 +840,66 @@ load_dh_file(char *filename, bool isServerStart)
 		return NULL;
 	}
 
-	/* make sure the DH parameters are usable */
-	if (DH_check(dh, &codes) == 0)
+#if OPENSSL_VERSION_MAJOR < 3
 	{
-		ereport(isServerStart ? FATAL : LOG,
-				(errcode(ERRCODE_CONFIG_FILE_ERROR),
-				 errmsg("invalid DH parameters: %s",
-						SSLerrmessage(ERR_get_error()))));
-		return NULL;
+		int			codes;
+
+		/* make sure the DH parameters are usable */
+		if (DH_check(dh, &codes) == 0)
+		{
+			ereport(isServerStart ? FATAL : LOG,
+					(errcode(ERRCODE_CONFIG_FILE_ERROR),
+					 errmsg("invalid DH parameters: %s",
+							SSLerrmessage(ERR_get_error()))));
+			return NULL;
+		}
+		if (codes & DH_CHECK_P_NOT_PRIME)
+		{
+			ereport(isServerStart ? FATAL : LOG,
+					(errcode(ERRCODE_CONFIG_FILE_ERROR),
+					 errmsg("invalid DH parameters: p is not prime")));
+			return NULL;
+		}
+		if ((codes & DH_NOT_SUITABLE_GENERATOR) &&
+			(codes & DH_CHECK_P_NOT_SAFE_PRIME))
+		{
+			ereport(isServerStart ? FATAL : LOG,
+					(errcode(ERRCODE_CONFIG_FILE_ERROR),
+					 errmsg("invalid DH parameters: neither suitable generator or safe prime")));
+			return NULL;
+		}
 	}
-	if (codes & DH_CHECK_P_NOT_PRIME)
+#else
 	{
-		ereport(isServerStart ? FATAL : LOG,
-				(errcode(ERRCODE_CONFIG_FILE_ERROR),
-				 errmsg("invalid DH parameters: p is not prime")));
-		return NULL;
+		EVP_PKEY	   *pkey;
+		EVP_PKEY_CTX   *pkey_ctx = NULL;
+		unsigned long	err = 0;
+
+		pkey = EVP_PKEY_new();
+
+		if (!EVP_PKEY_set1_DH(pkey, dh))
+			err = ERR_get_error();
+		else
+		{
+			pkey_ctx = EVP_PKEY_CTX_new_from_pkey(NULL, pkey, NULL);
+
+			if (!EVP_PKEY_param_check(pkey_ctx))
+				err = ERR_get_error();
+		}
+
+		EVP_PKEY_CTX_free(pkey_ctx);
+		EVP_PKEY_free(pkey);
+
+		if (err)
+		{
+			ereport(isServerStart ? FATAL : LOG,
+					(errcode(ERRCODE_CONFIG_FILE_ERROR),
+					 errmsg("invalid DH parameters: %s",
+							SSLerrmessage(err))));
+			return NULL;
+		}
 	}
-	if ((codes & DH_NOT_SUITABLE_GENERATOR) &&
-		(codes & DH_CHECK_P_NOT_SAFE_PRIME))
-	{
-		ereport(isServerStart ? FATAL : LOG,
-				(errcode(ERRCODE_CONFIG_FILE_ERROR),
-				 errmsg("invalid DH parameters: neither suitable generator or safe prime")));
-		return NULL;
-	}
+#endif
 
 	return dh;
 }

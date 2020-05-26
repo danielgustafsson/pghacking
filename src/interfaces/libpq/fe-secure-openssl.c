@@ -922,7 +922,7 @@ initialize_SSL(PGconn *conn)
 	{
 		X509_STORE *cvstore;
 
-		if (SSL_CTX_load_verify_locations(SSL_context, fnbuf, NULL) != 1)
+		if (SSL_CTX_load_verify_file(SSL_context, fnbuf) != 1)
 		{
 			char	   *err = SSLerrmessage(ERR_get_error());
 
@@ -945,7 +945,7 @@ initialize_SSL(PGconn *conn)
 
 			/* Set the flags to check against the complete CRL chain */
 			if (fnbuf[0] != '\0' &&
-				X509_STORE_load_locations(cvstore, fnbuf, NULL) == 1)
+				X509_STORE_load_file(cvstore, fnbuf) == 1)
 			{
 				X509_STORE_set_flags(cvstore,
 									 X509_V_FLAG_CRL_CHECK | X509_V_FLAG_CRL_CHECK_ALL);

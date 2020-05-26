@@ -80,7 +80,8 @@ OBJS_COMMON = \
 ifeq ($(with_openssl),yes)
 OBJS_COMMON += \
 	protocol_openssl.o \
-	sha2_openssl.o
+	sha2_openssl.o \
+	cert_openssl.o
 else
 OBJS_COMMON += sha2.o
 endif
