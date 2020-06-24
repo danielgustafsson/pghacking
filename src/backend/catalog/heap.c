@@ -710,6 +710,11 @@ CheckAttributeType(const char *attname,
 }
 
 /*
+ * Cap the maximum amount of bytes allocated for InsertPgAttributeTuples slots
+ */
+#define MAX_ATTRINSERT_BYTES 65535
+
+/*
  * InsertPgAttributeTuple
  *		Construct and insert a new tuple in pg_attribute.
  *
@@ -723,57 +728,92 @@ CheckAttributeType(const char *attname,
  * expensive.)
  */
 void
-InsertPgAttributeTuple(Relation pg_attribute_rel,
-					   Form_pg_attribute new_attribute,
-					   Datum attoptions,
-					   CatalogIndexState indstate)
+InsertPgAttributeTuples(Relation pg_attribute_rel,
+						TupleDesc tupdesc,
+						Oid new_rel_oid,
+						Datum *attoptions,
+						CatalogIndexState indstate)
 {
-	Datum		values[Natts_pg_attribute];
-	bool		nulls[Natts_pg_attribute];
-	HeapTuple	tup;
+	TupleTableSlot	  **slot;
+	TupleDesc			td;
+	int					nslots;
+	int					natts = 0;
+	int					count = 0;
+	bool				close_index = false;
 
-	/* This is a tad tedious, but way cleaner than what we used to do... */
-	memset(values, 0, sizeof(values));
-	memset(nulls, false, sizeof(nulls));
+	td = RelationGetDescr(pg_attribute_rel);
 
-	values[Anum_pg_attribute_attrelid - 1] = ObjectIdGetDatum(new_attribute->attrelid);
-	values[Anum_pg_attribute_attname - 1] = NameGetDatum(&new_attribute->attname);
-	values[Anum_pg_attribute_atttypid - 1] = ObjectIdGetDatum(new_attribute->atttypid);
-	values[Anum_pg_attribute_attstattarget - 1] = Int32GetDatum(new_attribute->attstattarget);
-	values[Anum_pg_attribute_attlen - 1] = Int16GetDatum(new_attribute->attlen);
-	values[Anum_pg_attribute_attnum - 1] = Int16GetDatum(new_attribute->attnum);
-	values[Anum_pg_attribute_attndims - 1] = Int32GetDatum(new_attribute->attndims);
-	values[Anum_pg_attribute_attcacheoff - 1] = Int32GetDatum(-1);
-	values[Anum_pg_attribute_atttypmod - 1] = Int32GetDatum(new_attribute->atttypmod);
-	values[Anum_pg_attribute_attbyval - 1] = BoolGetDatum(new_attribute->attbyval);
-	values[Anum_pg_attribute_attstorage - 1] = CharGetDatum(new_attribute->attstorage);
-	values[Anum_pg_attribute_attalign - 1] = CharGetDatum(new_attribute->attalign);
-	values[Anum_pg_attribute_attnotnull - 1] = BoolGetDatum(new_attribute->attnotnull);
-	values[Anum_pg_attribute_atthasdef - 1] = BoolGetDatum(new_attribute->atthasdef);
-	values[Anum_pg_attribute_atthasmissing - 1] = BoolGetDatum(new_attribute->atthasmissing);
-	values[Anum_pg_attribute_attidentity - 1] = CharGetDatum(new_attribute->attidentity);
-	values[Anum_pg_attribute_attgenerated - 1] = CharGetDatum(new_attribute->attgenerated);
-	values[Anum_pg_attribute_attisdropped - 1] = BoolGetDatum(new_attribute->attisdropped);
-	values[Anum_pg_attribute_attislocal - 1] = BoolGetDatum(new_attribute->attislocal);
-	values[Anum_pg_attribute_attinhcount - 1] = Int32GetDatum(new_attribute->attinhcount);
-	values[Anum_pg_attribute_attcollation - 1] = ObjectIdGetDatum(new_attribute->attcollation);
-	values[Anum_pg_attribute_attoptions - 1] = attoptions;
+	nslots = Min(tupdesc->natts,
+				 (MAX_ATTRINSERT_BYTES / sizeof(FormData_pg_attribute)));
+	slot = palloc(sizeof(TupleTableSlot *) * nslots);
+	for (int i = 0; i < nslots; i++)
+		slot[i] = MakeSingleTupleTableSlot(td, &TTSOpsHeapTuple);
 
-	/* start out with empty permissions and empty options */
-	nulls[Anum_pg_attribute_attacl - 1] = true;
-	nulls[Anum_pg_attribute_attoptions - 1] = attoptions == (Datum) 0;
-	nulls[Anum_pg_attribute_attfdwoptions - 1] = true;
-	nulls[Anum_pg_attribute_attmissingval - 1] = true;
+	while (natts < tupdesc->natts)
+	{
+		Form_pg_attribute		attrs = TupleDescAttr(tupdesc, natts);
 
-	tup = heap_form_tuple(RelationGetDescr(pg_attribute_rel), values, nulls);
+		ExecClearTuple(slot[count]);
 
-	/* finally insert the new tuple, update the indexes, and clean up */
-	if (indstate != NULL)
-		CatalogTupleInsertWithInfo(pg_attribute_rel, tup, indstate);
-	else
-		CatalogTupleInsert(pg_attribute_rel, tup);
+		if (new_rel_oid != InvalidOid)
+			slot[count]->tts_values[Anum_pg_attribute_attrelid - 1] = ObjectIdGetDatum(new_rel_oid);
+		else
+			slot[count]->tts_values[Anum_pg_attribute_attrelid - 1] = ObjectIdGetDatum(attrs->attrelid);
 
-	heap_freetuple(tup);
+		slot[count]->tts_values[Anum_pg_attribute_attname - 1] = NameGetDatum(&attrs->attname);
+		slot[count]->tts_values[Anum_pg_attribute_atttypid - 1] = ObjectIdGetDatum(attrs->atttypid);
+		slot[count]->tts_values[Anum_pg_attribute_attstattarget - 1] = Int32GetDatum(attrs->attstattarget);
+		slot[count]->tts_values[Anum_pg_attribute_attlen - 1] = Int16GetDatum(attrs->attlen);
+		slot[count]->tts_values[Anum_pg_attribute_attnum - 1] = Int16GetDatum(attrs->attnum);
+		slot[count]->tts_values[Anum_pg_attribute_attndims - 1] = Int32GetDatum(attrs->attndims);
+		slot[count]->tts_values[Anum_pg_attribute_attcacheoff - 1] = Int32GetDatum(-1);
+		slot[count]->tts_values[Anum_pg_attribute_atttypmod - 1] = Int32GetDatum(attrs->atttypmod);
+		slot[count]->tts_values[Anum_pg_attribute_attbyval - 1] = BoolGetDatum(attrs->attbyval);
+		slot[count]->tts_values[Anum_pg_attribute_attstorage - 1] = CharGetDatum(attrs->attstorage);
+		slot[count]->tts_values[Anum_pg_attribute_attalign - 1] = CharGetDatum(attrs->attalign);
+		slot[count]->tts_values[Anum_pg_attribute_attnotnull - 1] = BoolGetDatum(attrs->attnotnull);
+		slot[count]->tts_values[Anum_pg_attribute_atthasdef - 1] = BoolGetDatum(attrs->atthasdef);
+		slot[count]->tts_values[Anum_pg_attribute_atthasmissing - 1] = BoolGetDatum(attrs->atthasmissing);
+		slot[count]->tts_values[Anum_pg_attribute_attidentity - 1] = CharGetDatum(attrs->attidentity);
+		slot[count]->tts_values[Anum_pg_attribute_attgenerated - 1] = CharGetDatum(attrs->attgenerated);
+		slot[count]->tts_values[Anum_pg_attribute_attisdropped - 1] = BoolGetDatum(attrs->attisdropped);
+		slot[count]->tts_values[Anum_pg_attribute_attislocal - 1] = BoolGetDatum(attrs->attislocal);
+		slot[count]->tts_values[Anum_pg_attribute_attinhcount - 1] = Int32GetDatum(attrs->attinhcount);
+		slot[count]->tts_values[Anum_pg_attribute_attcollation - 1] = ObjectIdGetDatum(attrs->attcollation);
+		if (attoptions && attoptions[natts] != (Datum) 0)
+			slot[count]->tts_values[Anum_pg_attribute_attoptions - 1] = attoptions[natts];
+		else
+			slot[count]->tts_isnull[Anum_pg_attribute_attoptions - 1] = true;
+
+		/* start out with empty permissions and empty options */
+		slot[count]->tts_isnull[Anum_pg_attribute_attacl - 1] = true;
+		slot[count]->tts_isnull[Anum_pg_attribute_attfdwoptions - 1] = true;
+		slot[count]->tts_isnull[Anum_pg_attribute_attmissingval - 1] = true;
+
+		ExecStoreVirtualTuple(slot[count]);
+		count++;
+
+		if (count == nslots || natts == tupdesc->natts - 1)
+		{
+			if (!indstate)
+			{
+				indstate = CatalogOpenIndexes(pg_attribute_rel);
+				close_index = true;
+			}
+					
+			CatalogTuplesMultiInsertWithInfo(pg_attribute_rel, slot, count, indstate);
+			count = 0;
+		}
+
+		natts++;
+	}
+
+	if (close_index)
+		CatalogCloseIndexes(indstate);
+	
+	for (int i = 0; i < Min(tupdesc->natts, nslots); i++)
+		ExecDropSingleTupleTableSlot(slot[i]);
+	pfree(slot);
 }
 
 /* --------------------------------
@@ -788,8 +828,6 @@ AddNewAttributeTuples(Oid new_rel_oid,
 					  TupleDesc tupdesc,
 					  char relkind)
 {
-	Form_pg_attribute attr;
-	int			i;
 	Relation	rel;
 	CatalogIndexState indstate;
 	int			natts = tupdesc->natts;
@@ -803,35 +841,31 @@ AddNewAttributeTuples(Oid new_rel_oid,
 
 	indstate = CatalogOpenIndexes(rel);
 
+
+	for (int i = 0; i < natts; i++)
+		tupdesc->attrs[i].attstattarget = -1;
+	InsertPgAttributeTuples(rel, tupdesc, new_rel_oid, NULL, indstate);
+
 	/*
-	 * First we add the user attributes.  This is also a convenient place to
-	 * add dependencies on their datatypes and collations.
+	 * Now add dependencies on their datatypes and collations
 	 */
-	for (i = 0; i < natts; i++)
+	for (int i = 0; i < natts; i++)
 	{
-		attr = TupleDescAttr(tupdesc, i);
-		/* Fill in the correct relation OID */
-		attr->attrelid = new_rel_oid;
-		/* Make sure this is OK, too */
-		attr->attstattarget = -1;
-
-		InsertPgAttributeTuple(rel, attr, (Datum) 0, indstate);
-
 		/* Add dependency info */
 		myself.classId = RelationRelationId;
 		myself.objectId = new_rel_oid;
 		myself.objectSubId = i + 1;
 		referenced.classId = TypeRelationId;
-		referenced.objectId = attr->atttypid;
+		referenced.objectId = tupdesc->attrs[i].atttypid;
 		referenced.objectSubId = 0;
 		recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
 
 		/* The default collation is pinned, so don't bother recording it */
-		if (OidIsValid(attr->attcollation) &&
-			attr->attcollation != DEFAULT_COLLATION_OID)
+		if (OidIsValid(tupdesc->attrs[i].attcollation) &&
+			tupdesc->attrs[i].attcollation != DEFAULT_COLLATION_OID)
 		{
 			referenced.classId = CollationRelationId;
-			referenced.objectId = attr->attcollation;
+			referenced.objectId = tupdesc->attrs[i].attcollation;
 			referenced.objectSubId = 0;
 			recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
 		}
@@ -844,17 +878,12 @@ AddNewAttributeTuples(Oid new_rel_oid,
 	 */
 	if (relkind != RELKIND_VIEW && relkind != RELKIND_COMPOSITE_TYPE)
 	{
-		for (i = 0; i < (int) lengthof(SysAtt); i++)
-		{
-			FormData_pg_attribute attStruct;
+		TupleDesc	td;
+		
+		td= CreateTupleDesc(lengthof(SysAtt), (FormData_pg_attribute **) &SysAtt);
 
-			memcpy(&attStruct, SysAtt[i], sizeof(FormData_pg_attribute));
-
-			/* Fill in the correct relation OID in the copied tuple */
-			attStruct.attrelid = new_rel_oid;
-
-			InsertPgAttributeTuple(rel, &attStruct, (Datum) 0, indstate);
-		}
+		InsertPgAttributeTuples(rel, td, new_rel_oid, NULL, indstate);
+		FreeTupleDesc(td);
 	}
 
 	/*
@@ -3537,6 +3566,7 @@ StorePartitionKey(Relation rel,
 	bool		nulls[Natts_pg_partitioned_table];
 	ObjectAddress myself;
 	ObjectAddress referenced;
+	ObjectAddresses *refobjs;
 
 	Assert(rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE);
 
@@ -3584,26 +3614,31 @@ StorePartitionKey(Relation rel,
 	myself.objectId = RelationGetRelid(rel);
 	myself.objectSubId = 0;
 
+	refobjs = new_object_addresses();
+
 	/* Operator class and collation per key column */
 	for (i = 0; i < partnatts; i++)
 	{
-		referenced.classId = OperatorClassRelationId;
-		referenced.objectId = partopclass[i];
-		referenced.objectSubId = 0;
+		ObjectAddress	ocobj;
 
-		recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+		ObjectAddressSet(ocobj, OperatorClassRelationId, partopclass[i]);
+		add_exact_object_address(&ocobj, refobjs);
+
 
 		/* The default collation is pinned, so don't bother recording it */
 		if (OidIsValid(partcollation[i]) &&
 			partcollation[i] != DEFAULT_COLLATION_OID)
 		{
-			referenced.classId = CollationRelationId;
-			referenced.objectId = partcollation[i];
-			referenced.objectSubId = 0;
+			ObjectAddress	collobj;
 
-			recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+			ObjectAddressSet(collobj, CollationRelationId, partcollation[i]);
+			add_exact_object_address(&collobj, refobjs);
 		}
 	}
+
+	/* Store the dependencies in the catalog */
+	record_object_address_dependencies(&myself, refobjs, DEPENDENCY_NORMAL);
+	free_object_addresses(refobjs);
 
 	/*
 	 * The partitioning columns are made internally dependent on the table,
