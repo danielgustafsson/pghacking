@@ -100,13 +100,20 @@ PageIsVerifiedExtended(Page page, BlockNumber blkno, int flags)
 	 */
 	if (!PageIsNew(page))
 	{
-		if (DataChecksumsEnabled())
+		/*
+		 * Hold interrupts for the duration of the checksum check to ensure
+		 * that the data checkums state cannot change and thus risking a false
+		 * positive or negative.
+		 */
+		HOLD_INTERRUPTS();
+		if (DataChecksumsNeedVerify())
 		{
 			checksum = pg_checksum_page((char *) page, blkno);
 
 			if (checksum != p->pd_checksum)
 				checksum_failure = true;
 		}
+		RESUME_INTERRUPTS();
 
 		/*
 		 * The following checks don't prove the header is correct, only that
@@ -1395,7 +1402,7 @@ PageSetChecksumCopy(Page page, BlockNumber blkno)
 	static char *pageCopy = NULL;
 
 	/* If we don't need a checksum, just return the passed-in data */
-	if (PageIsNew(page) || !DataChecksumsEnabled())
+	if (PageIsNew(page) || !DataChecksumsNeedWrite())
 		return (char *) page;
 
 	/*
@@ -1422,7 +1429,7 @@ void
 PageSetChecksumInplace(Page page, BlockNumber blkno)
 {
 	/* If we don't need a checksum, just return */
-	if (PageIsNew(page) || !DataChecksumsEnabled())
+	if (PageIsNew(page) || !DataChecksumsNeedWrite())
 		return;
 
 	((PageHeader) page)->pd_checksum = pg_checksum_page((char *) page, blkno);
