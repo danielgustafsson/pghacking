@@ -625,6 +625,7 @@ ac_includes_default="\
 # include <unistd.h>
 #endif"
 
+ac_func_list=
 ac_subst_vars='LTLIBOBJS
 vpath_build
 PG_SYSROOT
@@ -2703,6 +2704,41 @@ $as_echo "$as_me: creating cache $cache_file" >&6;}
   >$cache_file
 fi
 
+as_fn_append ac_func_list " strerror_r"
+as_fn_append ac_func_list " getpwuid_r"
+as_fn_append ac_func_list " gethostbyname_r"
+as_fn_append ac_func_list " backtrace_symbols"
+as_fn_append ac_func_list " clock_gettime"
+as_fn_append ac_func_list " copyfile"
+as_fn_append ac_func_list " fdatasync"
+as_fn_append ac_func_list " getifaddrs"
+as_fn_append ac_func_list " getpeerucred"
+as_fn_append ac_func_list " getrlimit"
+as_fn_append ac_func_list " kqueue"
+as_fn_append ac_func_list " mbstowcs_l"
+as_fn_append ac_func_list " memset_s"
+as_fn_append ac_func_list " poll"
+as_fn_append ac_func_list " posix_fallocate"
+as_fn_append ac_func_list " ppoll"
+as_fn_append ac_func_list " pstat"
+as_fn_append ac_func_list " pthread_is_threaded_np"
+as_fn_append ac_func_list " readlink"
+as_fn_append ac_func_list " setproctitle"
+as_fn_append ac_func_list " setproctitle_fast"
+as_fn_append ac_func_list " setsid"
+as_fn_append ac_func_list " shm_open"
+as_fn_append ac_func_list " strchrnul"
+as_fn_append ac_func_list " strsignal"
+as_fn_append ac_func_list " symlink"
+as_fn_append ac_func_list " sync_file_range"
+as_fn_append ac_func_list " uselocale"
+as_fn_append ac_func_list " wcstombs_l"
+as_fn_append ac_func_list " strtoll"
+as_fn_append ac_func_list " __strtoll"
+as_fn_append ac_func_list " strtoq"
+as_fn_append ac_func_list " strtoull"
+as_fn_append ac_func_list " __strtoull"
+as_fn_append ac_func_list " strtouq"
 # Check that the precious variables saved in the cache have kept the same
 # value.
 ac_cache_corrupted=false
@@ -10447,6 +10483,27 @@ fi
 done
 
 
+
+
+
+  for ac_func in $ac_func_list
+do :
+  as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
+ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
+if eval test \"x\$"$as_ac_var"\" = x"yes"; then :
+  cat >>confdefs.h <<_ACEOF
+#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
+_ACEOF
+
+fi
+done
+
+
+
+
+
+
+
 if test "$enable_thread_safety" = yes -a "$PORTNAME" != "win32"; then :
    # then
 
@@ -11112,17 +11169,6 @@ fi
 
 
 
-for ac_func in strerror_r getpwuid_r gethostbyname_r
-do :
-  as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
-ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
-if eval test \"x\$"$as_ac_var"\" = x"yes"; then :
-  cat >>confdefs.h <<_ACEOF
-#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
-_ACEOF
-
-fi
-done
 
 
 # Do test here with the proper thread flags
@@ -15155,17 +15201,58 @@ fi
 LIBS_including_readline="$LIBS"
 LIBS=`echo "$LIBS" | sed -e 's/-ledit//g' -e 's/-lreadline//g'`
 
-for ac_func in backtrace_symbols clock_gettime copyfile fdatasync getifaddrs getpeerucred getrlimit kqueue mbstowcs_l memset_s poll posix_fallocate ppoll pstat pthread_is_threaded_np readlink setproctitle setproctitle_fast setsid shm_open strchrnul strsignal symlink sync_file_range uselocale wcstombs_l
-do :
-  as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
-ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
-if eval test \"x\$"$as_ac_var"\" = x"yes"; then :
-  cat >>confdefs.h <<_ACEOF
-#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
-_ACEOF
 
-fi
-done
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # These typically are compiler builtins, for which AC_CHECK_FUNCS fails.
@@ -15589,8 +15676,7 @@ _ACEOF
 
 fi # fi
 
-ac_fn_c_check_decl "$LINENO" "fdatasync" "ac_cv_have_decl_fdatasync" "#include <unistd.h>
-"
+ac_fn_c_check_decl "$LINENO" "fdatasync" "ac_cv_have_decl_fdatasync" "$ac_includes_default"
 if test "x$ac_cv_have_decl_fdatasync" = xyes; then :
   ac_have_decl=1
 else
@@ -15600,6 +15686,7 @@ fi
 cat >>confdefs.h <<_ACEOF
 #define HAVE_DECL_FDATASYNC $ac_have_decl
 _ACEOF
+
 
 ac_fn_c_check_decl "$LINENO" "strlcat" "ac_cv_have_decl_strlcat" "$ac_includes_default"
 if test "x$ac_cv_have_decl_strlcat" = xyes; then :
@@ -15611,6 +15698,7 @@ fi
 cat >>confdefs.h <<_ACEOF
 #define HAVE_DECL_STRLCAT $ac_have_decl
 _ACEOF
+
 ac_fn_c_check_decl "$LINENO" "strlcpy" "ac_cv_have_decl_strlcpy" "$ac_includes_default"
 if test "x$ac_cv_have_decl_strlcpy" = xyes; then :
   ac_have_decl=1
@@ -15621,6 +15709,7 @@ fi
 cat >>confdefs.h <<_ACEOF
 #define HAVE_DECL_STRLCPY $ac_have_decl
 _ACEOF
+
 ac_fn_c_check_decl "$LINENO" "strnlen" "ac_cv_have_decl_strnlen" "$ac_includes_default"
 if test "x$ac_cv_have_decl_strnlen" = xyes; then :
   ac_have_decl=1
@@ -15632,9 +15721,9 @@ cat >>confdefs.h <<_ACEOF
 #define HAVE_DECL_STRNLEN $ac_have_decl
 _ACEOF
 
+
 # This is probably only present on macOS, but may as well check always
-ac_fn_c_check_decl "$LINENO" "F_FULLFSYNC" "ac_cv_have_decl_F_FULLFSYNC" "#include <fcntl.h>
-"
+ac_fn_c_check_decl "$LINENO" "F_FULLFSYNC" "ac_cv_have_decl_F_FULLFSYNC" "$ac_includes_default"
 if test "x$ac_cv_have_decl_F_FULLFSYNC" = xyes; then :
   ac_have_decl=1
 else
@@ -15646,8 +15735,8 @@ cat >>confdefs.h <<_ACEOF
 _ACEOF
 
 
-ac_fn_c_check_decl "$LINENO" "RTLD_GLOBAL" "ac_cv_have_decl_RTLD_GLOBAL" "#include <dlfcn.h>
-"
+
+ac_fn_c_check_decl "$LINENO" "RTLD_GLOBAL" "ac_cv_have_decl_RTLD_GLOBAL" "$ac_includes_default"
 if test "x$ac_cv_have_decl_RTLD_GLOBAL" = xyes; then :
   ac_have_decl=1
 else
@@ -15657,8 +15746,8 @@ fi
 cat >>confdefs.h <<_ACEOF
 #define HAVE_DECL_RTLD_GLOBAL $ac_have_decl
 _ACEOF
-ac_fn_c_check_decl "$LINENO" "RTLD_NOW" "ac_cv_have_decl_RTLD_NOW" "#include <dlfcn.h>
-"
+
+ac_fn_c_check_decl "$LINENO" "RTLD_NOW" "ac_cv_have_decl_RTLD_NOW" "$ac_includes_default"
 if test "x$ac_cv_have_decl_RTLD_NOW" = xyes; then :
   ac_have_decl=1
 else
@@ -15668,6 +15757,7 @@ fi
 cat >>confdefs.h <<_ACEOF
 #define HAVE_DECL_RTLD_NOW $ac_have_decl
 _ACEOF
+
 
 
 ac_fn_c_check_type "$LINENO" "struct sockaddr_in6" "ac_cv_type_struct_sockaddr_in6" "$ac_includes_default
@@ -16253,29 +16343,19 @@ $as_echo "#define HAVE_INT_OPTRESET 1" >>confdefs.h
 
 fi
 
-for ac_func in strtoll __strtoll strtoq
-do :
-  as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
-ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
-if eval test \"x\$"$as_ac_var"\" = x"yes"; then :
-  cat >>confdefs.h <<_ACEOF
-#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
-_ACEOF
- break
-fi
-done
 
-for ac_func in strtoull __strtoull strtouq
-do :
-  as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
-ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
-if eval test \"x\$"$as_ac_var"\" = x"yes"; then :
-  cat >>confdefs.h <<_ACEOF
-#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
-_ACEOF
- break
-fi
-done
+
+
+
+
+
+
+
+
+
+
+
+
 
 # strto[u]ll may exist but not be declared
 ac_fn_c_check_decl "$LINENO" "strtoll" "ac_cv_have_decl_strtoll" "$ac_includes_default"
@@ -16288,6 +16368,7 @@ fi
 cat >>confdefs.h <<_ACEOF
 #define HAVE_DECL_STRTOLL $ac_have_decl
 _ACEOF
+
 ac_fn_c_check_decl "$LINENO" "strtoull" "ac_cv_have_decl_strtoull" "$ac_includes_default"
 if test "x$ac_cv_have_decl_strtoull" = xyes; then :
   ac_have_decl=1
@@ -16298,6 +16379,7 @@ fi
 cat >>confdefs.h <<_ACEOF
 #define HAVE_DECL_STRTOULL $ac_have_decl
 _ACEOF
+
 
 
 if test "$with_icu" = yes; then

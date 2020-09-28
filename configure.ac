@@ -1120,7 +1120,7 @@ LIBS="$LIBS $PTHREAD_LIBS"
 AC_CHECK_HEADER(pthread.h, [], [AC_MSG_ERROR([
 pthread.h not found;  use --disable-thread-safety to disable thread safety])])
 
-AC_CHECK_FUNCS([strerror_r getpwuid_r gethostbyname_r])
+AC_CHECK_FUNCS_ONCE([strerror_r getpwuid_r gethostbyname_r])
 
 # Do test here with the proper thread flags
 PGAC_FUNC_STRERROR_R_INT
@@ -1646,7 +1646,7 @@ PGAC_FUNC_WCSTOMBS_L
 LIBS_including_readline="$LIBS"
 LIBS=`echo "$LIBS" | sed -e 's/-ledit//g' -e 's/-lreadline//g'`
 
-AC_CHECK_FUNCS(m4_normalize([
+AC_CHECK_FUNCS_ONCE(m4_normalize([
 	backtrace_symbols
 	clock_gettime
 	copyfile
@@ -1697,12 +1697,12 @@ AC_CHECK_FUNCS(posix_fadvise)
 AC_CHECK_DECLS(posix_fadvise, [], [], [#include <fcntl.h>])
 ]) # fi
 
-AC_CHECK_DECLS(fdatasync, [], [], [#include <unistd.h>])
-AC_CHECK_DECLS([strlcat, strlcpy, strnlen])
+AC_CHECK_DECLS_ONCE(fdatasync, [], [], [#include <unistd.h>])
+AC_CHECK_DECLS_ONCE([strlcat, strlcpy, strnlen])
 # This is probably only present on macOS, but may as well check always
-AC_CHECK_DECLS(F_FULLFSYNC, [], [], [#include <fcntl.h>])
+AC_CHECK_DECLS_ONCE(F_FULLFSYNC, [], [], [#include <fcntl.h>])
 
-AC_CHECK_DECLS([RTLD_GLOBAL, RTLD_NOW], [], [], [#include <dlfcn.h>])
+AC_CHECK_DECLS_ONCE([RTLD_GLOBAL, RTLD_NOW], [], [], [#include <dlfcn.h>])
 
 AC_CHECK_TYPE([struct sockaddr_in6],
         [AC_DEFINE(HAVE_IPV6, 1, [Define to 1 if you have support for IPv6.])],
@@ -1848,10 +1848,10 @@ if test x"$pgac_cv_var_int_optreset" = x"yes"; then
   AC_DEFINE(HAVE_INT_OPTRESET, 1, [Define to 1 if you have the global variable 'int optreset'.])
 fi
 
-AC_CHECK_FUNCS([strtoll __strtoll strtoq], [break])
-AC_CHECK_FUNCS([strtoull __strtoull strtouq], [break])
+AC_CHECK_FUNCS_ONCE([strtoll __strtoll strtoq], [break])
+AC_CHECK_FUNCS_ONCE([strtoull __strtoull strtouq], [break])
 # strto[u]ll may exist but not be declared
-AC_CHECK_DECLS([strtoll, strtoull])
+AC_CHECK_DECLS_ONCE([strtoll, strtoull])
 
 if test "$with_icu" = yes; then
   ac_save_CPPFLAGS=$CPPFLAGS
