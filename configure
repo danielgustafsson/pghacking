@@ -18422,6 +18422,7 @@ $as_echo "NSS" >&6; }
 elif test x"$PORTNAME" = x"win32" ; then
   { $as_echo "$as_me:${as_lineno-$LINENO}: result: Windows native" >&5
 $as_echo "Windows native" >&6; }
+
 else
   { $as_echo "$as_me:${as_lineno-$LINENO}: result: /dev/urandom" >&5
 $as_echo "/dev/urandom" >&6; }

@@ -2197,6 +2197,7 @@ elif test x"$with_ssl" = x"nss" ; then
   AC_MSG_RESULT([NSS])
 elif test x"$PORTNAME" = x"win32" ; then
   AC_MSG_RESULT([Windows native])
+
 else
   AC_MSG_RESULT([/dev/urandom])
   AC_CHECK_FILE([/dev/urandom], [], [])
