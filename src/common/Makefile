@@ -85,11 +85,16 @@ OBJS_COMMON += \
 	protocol_openssl.o \
 	cryptohash_openssl.o
 else
+ifeq ($(with_ssl),nss)
+OBJS_COMMON += \
+	cryptohash_nss.o
+else
 OBJS_COMMON += \
 	cryptohash.o \
 	md5.o \
 	sha1.o \
 	sha2.o
+endif
 endif
 
 # A few files are currently only built for frontend, not server

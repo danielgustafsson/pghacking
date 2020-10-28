@@ -195,11 +195,18 @@ sub mkvcbuild
 	$postgres->FullExportDLL('postgres.lib');
 
 	# The OBJS scraper doesn't know about ifdefs, so remove appropriate files
-	# if building without OpenSSL.
-	if (!$solution->{options}->{openssl})
+	# if building without various options.
+	if (!$solution->{options}->{openssl} && !$solution->{options}->{nss})
 	{
 		$postgres->RemoveFile('src/backend/libpq/be-secure-common.c');
+	}
+	if (!$solution->{options}->{openssl})
+	{
 		$postgres->RemoveFile('src/backend/libpq/be-secure-openssl.c');
+	}
+	if (!$solution->{options}->{nss})
+	{
+		$postgres->RemoveFile('src/backend/libpq/be-secure-nss.c');
 	}
 	if (!$solution->{options}->{gss})
 	{
@@ -258,11 +265,18 @@ sub mkvcbuild
 	$libpq->AddReference($libpgcommon, $libpgport);
 
 	# The OBJS scraper doesn't know about ifdefs, so remove appropriate files
-	# if building without OpenSSL.
-	if (!$solution->{options}->{openssl})
+	# if building without various options
+	if (!$solution->{options}->{openssl} && !$solution->{options}->{nss})
 	{
 		$libpq->RemoveFile('src/interfaces/libpq/fe-secure-common.c');
+	}
+	if (!$solution->{options}->{openssl})
+	{
 		$libpq->RemoveFile('src/interfaces/libpq/fe-secure-openssl.c');
+	}
+	if (!$solution->{options}->{nss})
+	{
+		$libpq->RemoveFile('src/interfaces/libpq/fe-secure-nss.c');
 	}
 	if (!$solution->{options}->{gss})
 	{
