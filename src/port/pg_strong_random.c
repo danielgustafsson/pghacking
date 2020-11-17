@@ -24,7 +24,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 
-#ifdef USE_OPENSSL_RANDOM
+#ifdef USE_OPENSSL
 #include <openssl/rand.h>
 #endif
 #ifdef USE_WIN32_RANDOM
@@ -87,26 +87,11 @@ pg_strong_random_init(void)
 {
 #if defined(USE_OPENSSL)
 	/*
-	 * Make sure processes do not share OpenSSL randomness state. We need to
-	 * call this even if pg_strong_random is implemented using another source
-	 * for random numbers to ensure fork-safety in our TLS backend.  This is no
+	 * Make sure processes do not share OpenSSL randomness state.  This is no
 	 * longer required in OpenSSL 1.1.1 and later versions, but until we drop
 	 * support for version < 1.1.1 we need to do this.
 	*/
 	RAND_poll();
-#endif
-
-#if defined(USE_OPENSSL_RANDOM)
-	/*
-	 * In case the backend is using the PRNG from OpenSSL without being built
-	 * with support for OpenSSL, make sure to perform post-fork initialization.
-	 * If the backend is using OpenSSL then we have already performed this
-	 * step. The same version caveat as discussed in the comment above applies
-	 * here as well.
-	 */
-#ifndef USE_OPENSSL
-	RAND_poll();
-#endif
 
 #elif defined(USE_WIN32_RANDOM)
 	/* no initialization needed for WIN32 */
@@ -146,7 +131,7 @@ pg_strong_random(void *buf, size_t len)
 	/*
 	 * When built with OpenSSL, use OpenSSL's RAND_bytes function.
 	 */
-#if defined(USE_OPENSSL_RANDOM)
+#if defined(USE_OPENSSL)
 	int			i;
 
 	/*

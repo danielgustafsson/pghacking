@@ -887,9 +887,6 @@
 /* Define to build with OpenSSL support. (--with-openssl) */
 #undef USE_OPENSSL
 
-/* Define to use OpenSSL for random number generation */
-#undef USE_OPENSSL_RANDOM
-
 /* Define to 1 to build with PAM support. (--with-pam) */
 #undef USE_PAM
 
