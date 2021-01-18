@@ -132,6 +132,10 @@ sub mkvcbuild
 		push(@pgcommonallfiles, 'cryptohash_openssl.c');
 		push(@pgcommonallfiles, 'protocol_openssl.c');
 	}
+	elsif ($solution->{options}->{nss})
+	{
+		push(@pgcommonallfiles, 'cryptohash_nss.c');
+	}
 	else
 	{
 		push(@pgcommonallfiles, 'cryptohash.c');
