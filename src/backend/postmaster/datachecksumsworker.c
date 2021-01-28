@@ -224,7 +224,7 @@ typedef enum
 }			DatachecksumsWorkerResult;
 
 /*
- * Signaling between backends calling pg_enable/disable_checkums, the
+ * Signaling between backends calling pg_enable/disable_data_checksums, the
  * checksums launcher process, and the checksums worker process.
  *
  * This struct is protected by DatachecksumsWorkerLock
@@ -232,8 +232,8 @@ typedef enum
 typedef struct DatachecksumsWorkerShmemStruct
 {
 	/*
-	 * These are set by pg_enable/disable_checkums, to tell the launcher what
-	 * the target state is.
+	 * These are set by pg_enable/disable_data_checksums, to tell the launcher
+	 * what the target state is.
 	 */
 	bool		launch_enable_checksums;	/* True if checksums are being
 											 * enabled, else false */
@@ -251,9 +251,9 @@ typedef struct DatachecksumsWorkerShmemStruct
 	/*
 	 * These fields indicate the target state that the launcher is currently
 	 * working towards. They can be different from the corresponding launch_*
-	 * fields, if a new pg_enable_disable_checksums() call was made while the
-	 * launcher/worker was already running.
-
+	 * fields, if a new pg_enable/disable_data_checksums() call was made while
+	 * the launcher/worker was already running.
+	 *
 	 * The below members are set when the launcher starts, and are only
 	 * accessed read-only by the single worker. Thus, we can access these
 	 * without a lock. If multiple workers, or dynamic cost parameters, are
@@ -272,10 +272,11 @@ typedef struct DatachecksumsWorkerShmemStruct
 	 * the need for a lock. If multiple workers are supported then this will
 	 * have to be revisited.
 	 */
+
 	/* result, set by worker before exiting */
 	DatachecksumsWorkerResult success;
 
-	/* tells the worker process whether it should also process the shared catalogs. */
+	/* tells the worker process whether it should also process the shared catalogs */
 	bool		process_shared_catalogs;
 } DatachecksumsWorkerShmemStruct;
 
@@ -309,7 +310,7 @@ static volatile sig_atomic_t abort_requested = false;
 static volatile sig_atomic_t launcher_running = false;
 
 /*
- * Are we enabling checkums, or disabling them?
+ * Are we enabling data checksums, or disabling them?
  */
 static bool enabling_checksums;
 
@@ -358,20 +359,20 @@ StartDatachecksumsWorkerLauncher(bool enable_checksums, int cost_delay, int cost
 	/*
 	 * Launch a new launcher process, if it's not running already.
 	 *
-	 * If the launcher is currently busy enabling the checkums, and we want
+	 * If the launcher is currently busy enabling the checksums, and we want
 	 * them disabled (or vice versa), the launcher will notice that at latest
 	 * when it's about to exit, and will loop back process the new request.
 	 * So if the launcher is already running, we don't need to do anything
 	 * more here to abort it.
 	 *
-	 * If you call pg_enable/disable_checksums() twice in a row, before the
-	 * launcher has had a chance to start up, we still end up launching it
+	 * If you call pg_enable/disable_data_checksums() twice in a row, before
+	 * the launcher has had a chance to start up, we still end up launching it
 	 * twice.  That's OK, the second invocation will see that a launcher is
 	 * already running and exit quickly.
 	 *
 	 * TODO: We could optimize here and skip launching the launcher, if we are
 	 * already in the desired state, i.e. if the checksums are already enabled
-	 * and you call pg_enable_checksums().
+	 * and you call pg_enable_data_checksums().
 	 */
 	if (!launcher_running)
 	{
@@ -816,7 +817,7 @@ DatachecksumsWorkerLauncherMain(Datum arg)
 
 	if (DatachecksumsWorkerShmem->launcher_running)
 	{
-		/* Launcher was already running. Let it finish. */
+		/* Launcher was already running, let it finish */
 		LWLockRelease(DatachecksumsWorkerLock);
 		return;
 	}
@@ -831,14 +832,16 @@ DatachecksumsWorkerLauncherMain(Datum arg)
 	LWLockRelease(DatachecksumsWorkerLock);
 
 	/*
-	 * The target state can change while we are busy enabling/disabling checksums,
-	 * if the user calls pg_disable/enable_checksums() before we are finished with
-	 * the previous request. In that case, we will loop back here, to process the
-	 * new request.
+	 * The target state can change while we are busy enabling/disabling
+	 * checksums, if the user calls pg_disable/enable_data_checksums() before
+	 * we are finished with the previous request. In that case, we will loop
+	 * back here, to process the new request.
 	 */
 again:
 
 	memset(operations, 0, sizeof(operations));
+
+	HOLD_INTERRUPTS();
 
 	/*
 	 * If we're asked to enable checksums, we need to check if processing was
@@ -915,6 +918,8 @@ again:
 		operations[1] = RESET_STATE;
 	}
 
+	RESUME_INTERRUPTS();
+
 	for (int i = 0; i < MAX_OPS; i++)
 	{
 		current = operations[i];
@@ -939,15 +944,41 @@ again:
 			case RESET_STATE:
 				status = ProcessAllDatabases(&connected, "ResetDataChecksumsStateInDatabase");
 				if (!status)
+				{
+					/*
+					 * If the target state changed during processing then it's
+					 * not a failure, so restart processing instead.
+					 */
+					LWLockAcquire(DatachecksumsWorkerLock, LW_EXCLUSIVE);
+					if (DatachecksumsWorkerShmem->launch_enable_checksums != enabling_checksums)
+					{
+						LWLockRelease(DatachecksumsWorkerLock);
+						goto done;
+					}
+					LWLockRelease(DatachecksumsWorkerLock);
 					ereport(ERROR,
 							(errmsg("unable to reset catalog checksum state")));
+				}
 				break;
 
 			case ENABLE_CHECKSUMS:
 				status = ProcessAllDatabases(&connected, "DatachecksumsWorkerMain");
 				if (!status)
+				{
+					/*
+					 * If the target state changed during processing then it's
+					 * not a failure, so restart processing instead.
+					 */
+					LWLockAcquire(DatachecksumsWorkerLock, LW_EXCLUSIVE);
+					if (DatachecksumsWorkerShmem->launch_enable_checksums != enabling_checksums)
+					{
+						LWLockRelease(DatachecksumsWorkerLock);
+						goto done;
+					}
+					LWLockRelease(DatachecksumsWorkerLock);
 					ereport(ERROR,
 							(errmsg("unable to enable checksums in cluster")));
+				}
 				break;
 
 			default:
@@ -965,6 +996,7 @@ done:
 	if (DatachecksumsWorkerShmem->launch_enable_checksums != enabling_checksums)
 	{
 		DatachecksumsWorkerShmem->enabling_checksums = DatachecksumsWorkerShmem->launch_enable_checksums;
+		enabling_checksums = DatachecksumsWorkerShmem->launch_enable_checksums;
 		DatachecksumsWorkerShmem->cost_delay = DatachecksumsWorkerShmem->launch_cost_delay;
 		DatachecksumsWorkerShmem->cost_limit = DatachecksumsWorkerShmem->launch_cost_limit;
 		LWLockRelease(DatachecksumsWorkerLock);
