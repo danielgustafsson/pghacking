@@ -4,12 +4,10 @@ use PostgresNode;
 use TestLib;
 use Test::More;
 
-use File::Copy;
-
 use FindBin;
 use lib $FindBin::RealBin;
 
-use SSLServer;
+use SSL::Server;
 
 if ($ENV{with_ssl} ne 'openssl')
 {
@@ -32,32 +30,6 @@ my $SERVERHOSTCIDR = '127.0.0.1/32';
 # Allocation of base connection string shared among multiple tests.
 my $common_connstr;
 
-# The client's private key must not be world-readable, so take a copy
-# of the key stored in the code tree and update its permissions.
-#
-# This changes ssl/client.key to ssl/client_tmp.key etc for the rest
-# of the tests.
-my @keys = (
-	"client",     "client-revoked",
-	"client-der", "client-encrypted-pem",
-	"client-encrypted-der");
-foreach my $key (@keys)
-{
-	copy("ssl/${key}.key", "ssl/${key}_tmp.key")
-	  or die
-	  "couldn't copy ssl/${key}.key to ssl/${key}_tmp.key for permissions change: $!";
-	chmod 0600, "ssl/${key}_tmp.key"
-	  or die "failed to change permissions on ssl/${key}_tmp.key: $!";
-}
-
-# Also make a copy of that explicitly world-readable.  We can't
-# necessarily rely on the file in the source tree having those
-# permissions.  Add it to @keys to include it in the final clean
-# up phase.
-copy("ssl/client.key", "ssl/client_wrongperms_tmp.key");
-chmod 0644, "ssl/client_wrongperms_tmp.key";
-push @keys, 'client_wrongperms';
-
 #### Set up the server.
 
 note "setting up data directory";
@@ -72,31 +44,31 @@ $node->start;
 
 # Run this before we lock down access below.
 my $result = $node->safe_psql('postgres', "SHOW ssl_library");
-is($result, 'OpenSSL', 'ssl_library parameter');
+is($result, SSL::Server::ssl_library(), 'ssl_library parameter');
 
 configure_test_server_for_ssl($node, $SERVERHOSTADDR, $SERVERHOSTCIDR,
 	'trust');
 
 note "testing password-protected keys";
 
-open my $sslconf, '>', $node->data_dir . "/sslconfig.conf";
-print $sslconf "ssl=on\n";
-print $sslconf "ssl_cert_file='server-cn-only.crt'\n";
-print $sslconf "ssl_key_file='server-password.key'\n";
-print $sslconf "ssl_passphrase_command='echo wrongpassword'\n";
-close $sslconf;
+switch_server_cert($node,
+	certfile => 'server-cn-only',
+	cafile => 'root+client_ca',
+	keyfile => 'server-password',
+	passphrase_cmd => 'echo wrongpassword',
+	restart => 'no' );
 
 command_fails(
 	[ 'pg_ctl', '-D', $node->data_dir, '-l', $node->logfile, 'restart' ],
 	'restart fails with password-protected key file with wrong password');
 $node->_update_pid(0);
 
-open $sslconf, '>', $node->data_dir . "/sslconfig.conf";
-print $sslconf "ssl=on\n";
-print $sslconf "ssl_cert_file='server-cn-only.crt'\n";
-print $sslconf "ssl_key_file='server-password.key'\n";
-print $sslconf "ssl_passphrase_command='echo secret1'\n";
-close $sslconf;
+switch_server_cert($node,
+	certfile => 'server-cn-only',
+	cafile => 'root+client_ca',
+	keyfile => 'server-password',
+	passphrase_cmd => 'echo secret1',
+	restart => 'no');
 
 command_ok(
 	[ 'pg_ctl', '-D', $node->data_dir, '-l', $node->logfile, 'restart' ],
@@ -129,7 +101,7 @@ command_ok(
 
 note "running client tests";
 
-switch_server_cert($node, 'server-cn-only');
+switch_server_cert($node, certfile => 'server-cn-only', nssdatabase => 'server-cn-only.crt__server-cn-only.key.db');
 
 $common_connstr =
   "user=ssltestuser dbname=trustdb sslcert=invalid hostaddr=$SERVERHOSTADDR host=common-name.pg-ssltest.test";
@@ -254,7 +226,7 @@ test_connect_fails(
 	"mismatch between host name and server certificate sslmode=verify-full");
 
 # Test Subject Alternative Names.
-switch_server_cert($node, 'server-multiple-alt-names');
+switch_server_cert($node, certfile => 'server-multiple-alt-names');
 
 $common_connstr =
   "user=ssltestuser dbname=trustdb sslcert=invalid sslrootcert=ssl/root+server_ca.crt hostaddr=$SERVERHOSTADDR sslmode=verify-full";
@@ -285,7 +257,7 @@ test_connect_fails(
 
 # Test certificate with a single Subject Alternative Name. (this gives a
 # slightly different error message, that's all)
-switch_server_cert($node, 'server-single-alt-name');
+switch_server_cert($node, certfile => 'server-single-alt-name');
 
 $common_connstr =
   "user=ssltestuser dbname=trustdb sslcert=invalid sslrootcert=ssl/root+server_ca.crt hostaddr=$SERVERHOSTADDR sslmode=verify-full";
@@ -309,7 +281,7 @@ test_connect_fails(
 
 # Test server certificate with a CN and SANs. Per RFCs 2818 and 6125, the CN
 # should be ignored when the certificate has both.
-switch_server_cert($node, 'server-cn-and-alt-names');
+switch_server_cert($node, certfile => 'server-cn-and-alt-names');
 
 $common_connstr =
   "user=ssltestuser dbname=trustdb sslcert=invalid sslrootcert=ssl/root+server_ca.crt hostaddr=$SERVERHOSTADDR sslmode=verify-full";
@@ -330,7 +302,7 @@ test_connect_fails(
 
 # Finally, test a server certificate that has no CN or SANs. Of course, that's
 # not a very sensible certificate, but libpq should handle it gracefully.
-switch_server_cert($node, 'server-no-names');
+switch_server_cert($node, certfile => 'server-no-names');
 $common_connstr =
   "user=ssltestuser dbname=trustdb sslcert=invalid sslrootcert=ssl/root+server_ca.crt hostaddr=$SERVERHOSTADDR";
 
@@ -345,7 +317,7 @@ test_connect_fails(
 	"server certificate without CN or SANs sslmode=verify-full");
 
 # Test that the CRL works
-switch_server_cert($node, 'server-revoked');
+switch_server_cert($node, certfile => 'server-revoked');
 
 $common_connstr =
   "user=ssltestuser dbname=trustdb sslcert=invalid hostaddr=$SERVERHOSTADDR host=common-name.pg-ssltest.test";
@@ -404,6 +376,8 @@ test_connect_fails(
 ### Server-side tests.
 ###
 ### Test certificate authorization.
+
+switch_server_cert($node, certfile => 'server-revoked');
 
 note "running server tests";
 
@@ -552,7 +526,7 @@ test_connect_ok(
 );
 
 # intermediate client_ca.crt is provided by client, and isn't in server's ssl_ca_file
-switch_server_cert($node, 'server-cn-only', 'root_ca');
+switch_server_cert($node, certfile => 'server-cn-only', cafile => 'root_ca');
 $common_connstr =
   "user=ssltestuser dbname=certdb sslkey=ssl/client_tmp.key sslrootcert=ssl/root+server_ca.crt hostaddr=$SERVERHOSTADDR";
 
@@ -564,7 +538,7 @@ test_connect_fails($common_connstr, "sslmode=require sslcert=ssl/client.crt",
 	qr/SSL error/, "intermediate client certificate is missing");
 
 # test server-side CRL directory
-switch_server_cert($node, 'server-cn-only', undef, undef, 'root+client-crldir');
+switch_server_cert($node, certfile => 'server-cn-only', crldir => 'root+client-crldir');
 
 # revoked client cert
 test_connect_fails(
@@ -574,7 +548,5 @@ test_connect_fails(
 	"certificate authorization fails with revoked client cert with server-side CRL directory");
 
 # clean up
-foreach my $key (@keys)
-{
-	unlink("ssl/${key}_tmp.key");
-}
+
+SSL::Server::cleanup();

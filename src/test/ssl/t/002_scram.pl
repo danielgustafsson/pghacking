@@ -11,11 +11,11 @@ use File::Copy;
 use FindBin;
 use lib $FindBin::RealBin;
 
-use SSLServer;
+use SSL::Server;
 
 if ($ENV{with_ssl} ne 'openssl')
 {
-	plan skip_all => 'OpenSSL not supported by this build';
+	plan skip_all => 'SSL not supported by this build';
 }
 
 # This is the hostname used to connect to the server.
@@ -47,7 +47,7 @@ $node->start;
 # Configure server for SSL connections, with password handling.
 configure_test_server_for_ssl($node, $SERVERHOSTADDR, $SERVERHOSTCIDR,
 	"scram-sha-256", "pass", "scram-sha-256");
-switch_server_cert($node, 'server-cn-only');
+switch_server_cert($node, certfile => 'server-cn-only');
 $ENV{PGPASSWORD} = "pass";
 $common_connstr =
   "dbname=trustdb sslmode=require sslcert=invalid sslrootcert=invalid hostaddr=$SERVERHOSTADDR";
@@ -103,6 +103,6 @@ test_connect_fails(
 	"Cert authentication and channel_binding=require");
 
 # clean up
-unlink($client_tmp_key);
+SSL::Server::cleanup();
 
 done_testing($number_of_tests);
