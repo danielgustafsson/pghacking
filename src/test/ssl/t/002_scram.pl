@@ -11,11 +11,11 @@ use File::Copy;
 use FindBin;
 use lib $FindBin::RealBin;
 
-use SSLServer;
+use SSL::Server;
 
 if ($ENV{with_ssl} ne 'openssl')
 {
-	plan skip_all => 'OpenSSL not supported by this build';
+	plan skip_all => 'SSL not supported by this build';
 }
 
 # This is the hostname used to connect to the server.
@@ -98,5 +98,3 @@ $node->connect_fails(
 
 # clean up
 unlink($client_tmp_key);
-
-done_testing($number_of_tests);
