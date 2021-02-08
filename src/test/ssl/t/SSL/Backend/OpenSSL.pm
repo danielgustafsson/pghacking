@@ -71,16 +71,19 @@ sub init
 # the server so that the configuration takes effect.
 sub set_server_cert
 {
-	my $self     = $_[0];
-	my $certfile = $_[1];
-	my $cafile   = $_[2] || "root+client_ca";
-	my $keyfile  = $_[3] || $certfile;
+	my $self   = $_[0];
+	my $params = $_[1];
+
+	$params->{cafile} = 'root+client_ca' unless defined $params->{cafile};
+	$params->{crlfile} = 'root+client.crl' unless defined $params->{crlfile};
+	$params->{keyfile} = $params->{certfile} unless defined $params->{keyfile};
 
 	my $sslconf =
-	    "ssl_ca_file='$cafile.crt'\n"
-	  . "ssl_cert_file='$certfile.crt'\n"
-	  . "ssl_key_file='$keyfile.key'\n"
-	  . "ssl_crl_file='root+client.crl'\n";
+	    "ssl_ca_file='$params->{cafile}.crt'\n"
+	  . "ssl_cert_file='$params->{certfile}.crt'\n"
+	  . "ssl_key_file='$params->{keyfile}.key'\n"
+	  . "ssl_crl_file='$params->{crlfile}'\n";
+	$sslconf .= "ssl_crl_dir='$params->{crldir}'\n" if defined $params->{crldir};
 
 	return $sslconf;
 }

@@ -55,7 +55,6 @@ elsif ($ENV{with_ssl} eq 'nss')
 use Exporter 'import';
 our @EXPORT = qw(
   configure_test_server_for_ssl
-  set_server_cert
   switch_server_cert
 );
 
@@ -167,46 +166,25 @@ sub cleanup
 	$backend->cleanup();
 }
 
-# Change the configuration to use given server cert file,
-sub set_server_cert
+# Change the configuration to use the given set of certificate, key, ca and
+# CRL, and potentially reload the configuration by restarting the server so
+# that the configuration takes effect.  Restarting is the default, passing
+# restart => 'no' opts out of it leaving the server running.
+sub switch_server_cert
 {
-	my $node     = $_[0];
-	my $certfile = $_[1];
-	my $cafile   = $_[2] || "root+client_ca";
-	my $keyfile  = $_[3] || '';
-	my $pwcmd    = $_[4] || '';
-	my $crlfile  = "root+client.crl";
-	my $crldir;
-	my $pgdata   = $node->data_dir;
-
-	$keyfile = $certfile if $keyfile eq '';
-
-	# defaults to use crl file
-	if (defined $_[3] || defined $_[4])
-	{
-		$crlfile = $_[3];
-		$crldir = $_[4];
-	}
+	my $node   = shift;
+	my %params = @_;
+	my $pgdata = $node->data_dir;
 
 	open my $sslconf, '>', "$pgdata/sslconfig.conf";
 	print $sslconf "ssl=on\n";
-	print $sslconf $backend->set_server_cert($certfile, $cafile, $keyfile);
-	print $sslconf "ssl_crl_file='$crlfile'\n" if defined $crlfile;
-	print $sslconf "ssl_crl_dir='$crldir'\n" if defined $crldir;
-	print $sslconf "ssl_passphrase_command='$pwcmd'\n"
-	  unless $pwcmd eq '';
+	print $sslconf $backend->set_server_cert(\%params);
+	print $sslconf "ssl_passphrase_command='" . $params{passphrase_cmd} . "'\n"
+	  if defined $params{passphrase_cmd};
 	close $sslconf;
-	return;
-}
 
-# Change the configuration to use given server cert file, and reload
-# the server so that the configuration takes effect.
-# Takes the same arguments as set_server_cert, which it calls to do that
-# piece of the work.
-sub switch_server_cert
-{
-	my $node = $_[0];
-	set_server_cert(@_);
+	return if (defined($params{restart}) && $params{restart} eq 'no');
+
 	$node->restart;
 	return;
 }
