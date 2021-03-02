@@ -134,7 +134,16 @@ readstoplist(const char *fname, StopList *s, char *(*wordop) (const char *))
 
 	/* Sort to allow binary searching */
 	if (s->stop && s->len > 0)
-		qsort(s->stop, s->len, sizeof(char *), pg_qsort_strcmp);
+		qsort_strcmp(s->stop, s->len, sizeof(char *));
+}
+
+/*
+ * qsort comparator wrapper for strcmp.
+ */
+static int
+strcmp_cmp(const void *a, const void *b)
+{
+	return strcmp(*(const char *const *) a, *(const char *const *) b);
 }
 
 bool
@@ -142,5 +151,5 @@ searchstoplist(StopList *s, char *key)
 {
 	return (s->stop && s->len > 0 &&
 			bsearch(&key, s->stop, s->len,
-					sizeof(char *), pg_qsort_strcmp)) ? true : false;
+					sizeof(char *), strcmp_cmp)) ? true : false;
 }

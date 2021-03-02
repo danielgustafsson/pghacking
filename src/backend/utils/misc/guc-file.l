@@ -1072,7 +1072,7 @@ ParseConfigDirectory(const char *includedir,
 	{
 		int			i;
 
-		qsort(filenames, num_filenames, sizeof(char *), pg_qsort_strcmp);
+		qsort_strcmp(filenames, num_filenames, sizeof(char *));
 		for (i = 0; i < num_filenames; i++)
 		{
 			if (!ParseConfigFile(filenames[i], true,
