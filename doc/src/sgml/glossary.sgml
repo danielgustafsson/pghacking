@@ -891,6 +891,17 @@
     </glossdef>
   </glossentry>
 
+  <glossentry id="glossary-mitm">
+   <glossterm>Man-In-The-Middle (attack)</glossterm>
+   <glossdef>
+    <para>
+     A Man-In-The-Middle attack is when an attacker secretly relays, and
+     possibly alters, communication between two parties who think that they are
+     communicating directly with each other.
+    </para>
+   </glossdef>
+  </glossentry>
+
   <glossentry>
    <glossterm>Master (server)</glossterm>
    <glosssee otherterm="glossary-primary-server" />
@@ -1488,6 +1499,18 @@
    <glossdef>
     <para>
      A series of documents that define the <acronym>SQL</acronym> language.
+    </para>
+   </glossdef>
+  </glossentry>
+
+  <glossentry id="glossary-ssl-tls">
+   <glossterm>SSL/TLS</glossterm>
+   <glossdef>
+    <para>
+     A network connection using a <acronym>TLS</acronym> protocol to achieve
+     end-to-end encryption.  <acronym>SSL</acronym> refers to the now
+     unsupported <acronym>SSL</acronym> family of protocols, the term has
+     however become synonymous with secure connections.
     </para>
    </glossdef>
   </glossentry>

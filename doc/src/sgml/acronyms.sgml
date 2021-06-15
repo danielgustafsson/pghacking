@@ -411,6 +411,15 @@
    </varlistentry>
 
    <varlistentry>
+    <term><acronym>MITM</acronym></term>
+    <listitem>
+     <para>
+      <link linkend="glossary-mitm">Man-In-The-Middle</link> attack
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
     <term><acronym>MSVC</acronym></term>
     <listitem>
      <para>
@@ -586,6 +595,15 @@
      <para>
       <ulink url="https://en.wikipedia.org/wiki/SGML">Standard Generalized
       Markup Language</ulink>
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><acronym>SNI</acronym></term>
+    <listitem>
+     <para>
+      <link linkend="libpq-connect-sslsni">Server Name Indication</link>
      </para>
     </listitem>
    </varlistentry>

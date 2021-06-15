@@ -8429,7 +8429,7 @@ ldap://ldap.acme.com/cn=dbserver,cn=hosts?pgconnectinfo?base?(objectclass=*)
     </varlistentry>
 
     <varlistentry>
-     <term>Man in the middle (<acronym>MITM</acronym>)</term>
+     <term>Man-in-the-middle (<acronym>MITM</acronym>)</term>
      <listitem>
       <para>If a third party can modify the data while passing between the
        client and server, it can pretend to be the server and therefore see and
