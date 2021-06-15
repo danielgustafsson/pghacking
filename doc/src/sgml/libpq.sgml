@@ -1758,14 +1758,14 @@ postgresql://%2Fvar%2Flib%2Fpostgresql/dbname
       <term><literal>sslcrldir</literal></term>
       <listitem>
        <para>
-        This parameter specifies the directory name of the SSL certificate
-        revocation list (CRL).  Certificates listed in the files in this
+        This parameter specifies the directory name of the <acronym>SSL</acronym>/<acronym>TLS</acronym> certificate
+        revocation list (<acronym>CRL</acronym>).  Certificates listed in the files in this
         directory, if it exists, will be rejected while attempting to
         authenticate the server's certificate.
        </para>
 
        <para>
-        The directory needs to be prepared with the OpenSSL command
+        The directory needs to be prepared with the <productname>OpenSSL</productname> command
         <literal>openssl rehash</literal> or <literal>c_rehash</literal>.  See
         its documentation for details.
        </para>
