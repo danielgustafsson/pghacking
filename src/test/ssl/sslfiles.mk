@@ -16,6 +16,11 @@
 #
 #-------------------------------------------------------------------------
 
+
+# We need to adopt the srcdir from the calling Makefile in order to know where
+# to build from in case of VPATH builds
+srcdir = $(SRCDIR)
+
 #
 # To add a new server or client certificate, add a new <name>.config file in
 # the conf/ directory, then add <name> to either SERVERS or CLIENTS below. A
@@ -76,8 +81,8 @@ sslfiles: $(SSLFILES) $(SSLDIRS)
 #
 
 # Root CA is self-signed.
-ssl/root_ca.crt: ssl/root_ca.key conf/root_ca.config
-	openssl req -new -x509 -config conf/root_ca.config -days 10000 -key $< -out $@
+ssl/root_ca.crt: ssl/root_ca.key $(srcdir)/conf/root_ca.config
+	openssl req -new -x509 -config $(srcdir)/conf/root_ca.config -days 10000 -key $< -out $@
 
 #
 # Special-case keys
@@ -157,19 +162,19 @@ client_ca_state_files := ssl/client_ca-certindex ssl/client_ca-certindex.attr ss
 # These are the workhorse recipes. `openssl ca` can't be safely run from
 # parallel processes, so we must mark the entire Makefile .NOTPARALLEL.
 .NOTPARALLEL:
-$(CA_CERTS): ssl/%.crt: ssl/%.csr conf/%.config conf/cas.config ssl/root_ca.crt | ssl/new_certs_dir $(root_ca_state_files)
-	openssl ca -batch -config conf/cas.config -name root_ca   -notext -in $< -out $@
+$(CA_CERTS): ssl/%.crt: ssl/%.csr $(srcdir)/conf/%.config $(srcdir)/conf/cas.config ssl/root_ca.crt | ssl/new_certs_dir $(root_ca_state_files)
+	openssl ca -batch -config $(srcdir)/conf/cas.config -name root_ca -notext -in $< -out $@
 
-$(SERVER_CERTS): ssl/%.crt: ssl/%.csr conf/%.config conf/cas.config ssl/server_ca.crt | ssl/new_certs_dir $(server_ca_state_files)
-	openssl ca -batch -config conf/cas.config -name server_ca -notext -in $< -out $@
+$(SERVER_CERTS): ssl/%.crt: ssl/%.csr $(srcdir)/conf/%.config $(srcdir)/conf/cas.config ssl/server_ca.crt | ssl/new_certs_dir $(server_ca_state_files)
+	openssl ca -batch -config $(srcdir)/conf/cas.config -name server_ca -notext -in $< -out $@
 
-$(CLIENT_CERTS): ssl/%.crt: ssl/%.csr conf/%.config conf/cas.config ssl/client_ca.crt | ssl/new_certs_dir $(client_ca_state_files)
-	openssl ca -batch -config conf/cas.config -name client_ca -notext -in $< -out $@
+$(CLIENT_CERTS): ssl/%.crt: ssl/%.csr $(srcdir)/conf/%.config $(srcdir)/conf/cas.config ssl/client_ca.crt | ssl/new_certs_dir $(client_ca_state_files)
+	openssl ca -batch -config $(srcdir)/conf/cas.config -name client_ca -notext -in $< -out $@
 
 # The CSRs don't need to persist after a build.
 .INTERMEDIATE: $(CERTIFICATES:%=ssl/%.csr)
-ssl/%.csr: ssl/%.key conf/%.config
-	openssl req -new -key $< -out $@ -config conf/$*.config
+ssl/%.csr: ssl/%.key $(srcdir)/conf/%.config
+	openssl req -new -key $< -out $@ -config $(srcdir)/conf/$*.config
 
 #
 # CA State
@@ -203,15 +208,15 @@ ssl/%.srl:
 #
 
 ssl/root.crl: ssl/root_ca.crt | $(root_ca_state_files)
-	openssl ca -config conf/cas.config -name root_ca   -gencrl -out $@
+	openssl ca -config $(srcdir)/conf/cas.config -name root_ca -gencrl -out $@
 
 ssl/server.crl: ssl/server-revoked.crt ssl/server_ca.crt | $(server_ca_state_files)
-	openssl ca -config conf/cas.config -name server_ca -revoke $<
-	openssl ca -config conf/cas.config -name server_ca -gencrl -out $@
+	openssl ca -config $(srcdir)/conf/cas.config -name server_ca -revoke $<
+	openssl ca -config $(srcdir)/conf/cas.config -name server_ca -gencrl -out $@
 
 ssl/client.crl: ssl/client-revoked.crt ssl/client_ca.crt | $(client_ca_state_files)
-	openssl ca -config conf/cas.config -name client_ca -revoke $<
-	openssl ca -config conf/cas.config -name client_ca -gencrl -out $@
+	openssl ca -config $(srcdir)/conf/cas.config -name client_ca -revoke $<
+	openssl ca -config $(srcdir)/conf/cas.config -name client_ca -gencrl -out $@
 
 #
 # CRL hash directories
