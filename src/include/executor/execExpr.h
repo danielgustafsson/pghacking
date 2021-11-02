@@ -345,7 +345,7 @@ typedef struct ExprEvalStep
 		/* for EEOP_FUNCEXPR_* / NULLIF / DISTINCT */
 		struct
 		{
-			FmgrInfo   *finfo;	/* function's lookup data */
+			bool		fn_strict; /* function is strict */
 			FunctionCallInfo fcinfo_data;	/* arguments etc */
 			/* faster to access without additional indirection: */
 			PGFunction	fn_addr;	/* actual call address */
@@ -412,11 +412,12 @@ typedef struct ExprEvalStep
 		struct
 		{
 			/* lookup and call info for source type's output function */
-			FmgrInfo   *finfo_out;
 			FunctionCallInfo fcinfo_data_out;
+			PGFunction	fn_addr_out;	/* actual call address */
 			/* lookup and call info for result type's input function */
-			FmgrInfo   *finfo_in;
+			bool		fn_strict_in; /* in function is strict */
 			FunctionCallInfo fcinfo_data_in;
+			PGFunction	fn_addr_in;	/* actual call address */
 		}			iocoerce;
 
 		/* for EEOP_SQLVALUEFUNCTION */
@@ -466,7 +467,7 @@ typedef struct ExprEvalStep
 		struct
 		{
 			/* lookup and call data for column comparison function */
-			FmgrInfo   *finfo;
+			bool		fn_strict; /* function is strict */
 			FunctionCallInfo fcinfo_data;
 			PGFunction	fn_addr;
 			/* target for comparison resulting in NULL */
@@ -491,8 +492,8 @@ typedef struct ExprEvalStep
 			/* is it GREATEST or LEAST? */
 			MinMaxOp	op;
 			/* lookup and call data for comparison function */
-			FmgrInfo   *finfo;
 			FunctionCallInfo fcinfo_data;
+			PGFunction fn_addr;
 		}			minmax;
 
 		/* for EEOP_FIELDSELECT */
@@ -569,7 +570,7 @@ typedef struct ExprEvalStep
 			int16		typlen; /* array element type storage info */
 			bool		typbyval;
 			char		typalign;
-			FmgrInfo   *finfo;	/* function's lookup data */
+			bool		fn_strict; /* function is strict */
 			FunctionCallInfo fcinfo_data;	/* arguments etc */
 			/* faster to access without additional indirection: */
 			PGFunction	fn_addr;	/* actual call address */
@@ -634,6 +635,7 @@ typedef struct ExprEvalStep
 		struct
 		{
 			FunctionCallInfo fcinfo_data;
+			PGFunction	fn_addr;
 			int			jumpnull;
 		}			agg_deserialize;
 
@@ -678,6 +680,7 @@ typedef struct ExprEvalStep
 		{
 			AggStatePerTrans pertrans;
 			ExprContext *aggcontext;
+			PGFunction	fn_addr;
 			int			setno;
 			int			transno;
 			int			setoff;

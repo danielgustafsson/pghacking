@@ -1292,7 +1292,7 @@ ExecInitExprRec(Expr *node, ExprState *state,
 					scratch.opcode = EEOP_SCALARARRAYOP;
 					scratch.d.scalararrayop.element_type = InvalidOid;
 					scratch.d.scalararrayop.useOr = opexpr->useOr;
-					scratch.d.scalararrayop.finfo = finfo;
+					scratch.d.scalararrayop.fn_strict = finfo->fn_strict;
 					scratch.d.scalararrayop.fcinfo_data = fcinfo;
 					scratch.d.scalararrayop.fn_addr = finfo->fn_addr;
 					ExprEvalPushStep(state, &scratch);
@@ -1551,6 +1551,8 @@ ExecInitExprRec(Expr *node, ExprState *state,
 				bool		typisvarlena;
 				Oid			typioparam;
 				FunctionCallInfo fcinfo_in;
+				FmgrInfo   *finfo_in = palloc0(sizeof(FmgrInfo));
+				FmgrInfo   *finfo_out = palloc0(sizeof(FmgrInfo));
 
 				/* evaluate argument into step's result area */
 				ExecInitExprRec(iocoerce->arg, state, resv, resnull);
@@ -1566,28 +1568,29 @@ ExecInitExprRec(Expr *node, ExprState *state,
 				scratch.opcode = EEOP_IOCOERCE;
 
 				/* lookup the source type's output function */
-				scratch.d.iocoerce.finfo_out = palloc0(sizeof(FmgrInfo));
 				scratch.d.iocoerce.fcinfo_data_out = palloc0(SizeForFunctionCallInfo(1));
 
 				getTypeOutputInfo(exprType((Node *) iocoerce->arg),
 								  &iofunc, &typisvarlena);
-				fmgr_info(iofunc, scratch.d.iocoerce.finfo_out);
-				fmgr_info_set_expr((Node *) node, scratch.d.iocoerce.finfo_out);
+				fmgr_info(iofunc, finfo_out);
+				fmgr_info_set_expr((Node *) node, finfo_out);
 				InitFunctionCallInfoData(*scratch.d.iocoerce.fcinfo_data_out,
-										 scratch.d.iocoerce.finfo_out,
+										 finfo_out,
 										 1, InvalidOid, NULL, NULL);
+				scratch.d.iocoerce.fn_addr_out = finfo_out->fn_addr;
 
 				/* lookup the result type's input function */
-				scratch.d.iocoerce.finfo_in = palloc0(sizeof(FmgrInfo));
 				scratch.d.iocoerce.fcinfo_data_in = palloc0(SizeForFunctionCallInfo(3));
 
 				getTypeInputInfo(iocoerce->resulttype,
 								 &iofunc, &typioparam);
-				fmgr_info(iofunc, scratch.d.iocoerce.finfo_in);
-				fmgr_info_set_expr((Node *) node, scratch.d.iocoerce.finfo_in);
+				fmgr_info(iofunc, finfo_in);
+				fmgr_info_set_expr((Node *) node, finfo_in);
 				InitFunctionCallInfoData(*scratch.d.iocoerce.fcinfo_data_in,
-										 scratch.d.iocoerce.finfo_in,
+										 finfo_in,
 										 3, InvalidOid, NULL, NULL);
+				scratch.d.iocoerce.fn_strict_in = finfo_in->fn_strict;
+				scratch.d.iocoerce.fn_addr_in = finfo_in->fn_addr;
 
 				/*
 				 * We can preload the second and third arguments for the input
@@ -2056,7 +2059,7 @@ ExecInitExprRec(Expr *node, ExprState *state,
 									&fcinfo->args[1].value, &fcinfo->args[1].isnull);
 
 					scratch.opcode = EEOP_ROWCOMPARE_STEP;
-					scratch.d.rowcompare_step.finfo = finfo;
+					scratch.d.rowcompare_step.fn_strict = finfo->fn_strict;
 					scratch.d.rowcompare_step.fcinfo_data = fcinfo;
 					scratch.d.rowcompare_step.fn_addr = finfo->fn_addr;
 					/* jump targets filled below */
@@ -2194,8 +2197,8 @@ ExecInitExprRec(Expr *node, ExprState *state,
 				scratch.d.minmax.nelems = nelems;
 
 				scratch.d.minmax.op = minmaxexpr->op;
-				scratch.d.minmax.finfo = finfo;
 				scratch.d.minmax.fcinfo_data = fcinfo;
+				scratch.d.minmax.fn_addr = finfo->fn_addr;
 
 				/* evaluate expressions into minmax->values/nulls */
 				off = 0;
@@ -2607,10 +2610,9 @@ ExecInitFunc(ExprEvalStep *scratch, Expr *node, List *args, Oid funcid,
 							   FUNC_MAX_ARGS)));
 
 	/* Allocate function lookup data and parameter workspace for this call */
-	scratch->d.func.finfo = palloc0(sizeof(FmgrInfo));
-	scratch->d.func.fcinfo_data = palloc0(SizeForFunctionCallInfo(nargs));
-	flinfo = scratch->d.func.finfo;
-	fcinfo = scratch->d.func.fcinfo_data;
+	flinfo = palloc0(sizeof(FmgrInfo));
+	fcinfo = palloc0(SizeForFunctionCallInfo(nargs));
+	scratch->d.func.fcinfo_data = fcinfo;
 
 	/* Set up the primary fmgr lookup information */
 	fmgr_info(funcid, flinfo);
@@ -2621,6 +2623,7 @@ ExecInitFunc(ExprEvalStep *scratch, Expr *node, List *args, Oid funcid,
 							 nargs, inputcollid, NULL, NULL);
 
 	/* Keep extra copies of this info to save an indirection at runtime */
+	scratch->d.func.fn_strict = flinfo->fn_strict;
 	scratch->d.func.fn_addr = flinfo->fn_addr;
 	scratch->d.func.nargs = nargs;
 
@@ -3571,6 +3574,8 @@ ExecBuildAggTrans(AggState *aggstate, AggStatePerPhase phase,
 				else
 					scratch.opcode = EEOP_AGG_DESERIALIZE;
 
+				scratch.d.agg_deserialize.fn_addr =
+					pertrans->deserialfn.fn_addr;
 				scratch.d.agg_deserialize.fcinfo_data = ds_fcinfo;
 				scratch.d.agg_deserialize.jumpnull = -1;	/* adjust later */
 				scratch.resvalue = &trans_fcinfo->args[argno + 1].value;
@@ -3875,6 +3880,7 @@ ExecBuildAggTransCall(ExprState *state, AggState *aggstate,
 		scratch->opcode = EEOP_AGG_ORDERED_TRANS_TUPLE;
 
 	scratch->d.agg_trans.pertrans = pertrans;
+	scratch->d.agg_trans.fn_addr = fcinfo->flinfo->fn_addr;
 	scratch->d.agg_trans.setno = setno;
 	scratch->d.agg_trans.setoff = setoff;
 	scratch->d.agg_trans.transno = transno;
@@ -4007,9 +4013,9 @@ ExecBuildGroupingEqual(TupleDesc ldesc, TupleDesc rdesc,
 
 		/* evaluate distinctness */
 		scratch.opcode = EEOP_NOT_DISTINCT;
-		scratch.d.func.finfo = finfo;
-		scratch.d.func.fcinfo_data = fcinfo;
+		scratch.d.func.fn_strict = finfo->fn_strict;
 		scratch.d.func.fn_addr = finfo->fn_addr;
+		scratch.d.func.fcinfo_data = fcinfo;
 		scratch.d.func.nargs = 2;
 		scratch.resvalue = &state->resvalue;
 		scratch.resnull = &state->resnull;
@@ -4141,9 +4147,9 @@ ExecBuildParamSetEqual(TupleDesc desc,
 
 		/* evaluate distinctness */
 		scratch.opcode = EEOP_NOT_DISTINCT;
-		scratch.d.func.finfo = finfo;
-		scratch.d.func.fcinfo_data = fcinfo;
+		scratch.d.func.fn_strict = finfo->fn_strict;
 		scratch.d.func.fn_addr = finfo->fn_addr;
+		scratch.d.func.fcinfo_data = fcinfo;
 		scratch.d.func.nargs = 2;
 		scratch.resvalue = &state->resvalue;
 		scratch.resnull = &state->resnull;
