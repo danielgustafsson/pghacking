@@ -216,6 +216,8 @@ static const int MultiXactStatusLock[MaxMultiXactStatus + 1] =
 	LockTupleExclusive			/* Update */
 };
 
+bool seqscan_faster_order;
+
 /* Get the LockTupleMode for a given MultiXactStatus */
 #define TUPLOCK_from_mxstatus(status) \
 			(MultiXactStatusLock[(status)])
@@ -450,30 +452,61 @@ heapgetpage(TableScanDesc sscan, BlockNumber block)
 	 */
 	all_visible = PageIsAllVisible(page) && !snapshot->takenDuringRecovery;
 
-	for (lineoff = FirstOffsetNumber; lineoff <= lines; lineoff++)
+	if (seqscan_faster_order)
 	{
-		ItemId		lpp = PageGetItemId(page, lineoff);
-		HeapTupleData loctup;
-		bool		valid;
+		for (lineoff = lines; lineoff >= FirstOffsetNumber; lineoff--)
+		{
+			ItemId		lpp = PageGetItemId(page, lineoff);
+			HeapTupleData loctup;
+			bool		valid;
 
-		if (!ItemIdIsNormal(lpp))
-			continue;
+			if (!ItemIdIsNormal(lpp))
+				continue;
 
-		loctup.t_tableOid = RelationGetRelid(scan->rs_base.rs_rd);
-		loctup.t_data = (HeapTupleHeader) PageGetItem(page, lpp);
-		loctup.t_len = ItemIdGetLength(lpp);
-		ItemPointerSet(&(loctup.t_self), block, lineoff);
+			loctup.t_tableOid = RelationGetRelid(scan->rs_base.rs_rd);
+			loctup.t_data = (HeapTupleHeader) PageGetItem(page, lpp);
+			loctup.t_len = ItemIdGetLength(lpp);
+			ItemPointerSet(&(loctup.t_self), block, lineoff);
 
-		if (all_visible)
-			valid = true;
-		else
-			valid = HeapTupleSatisfiesVisibility(&loctup, snapshot, buffer);
+			if (all_visible)
+				valid = true;
+			else
+				valid = HeapTupleSatisfiesVisibility(&loctup, snapshot, buffer);
 
-		HeapCheckForSerializableConflictOut(valid, scan->rs_base.rs_rd,
-											&loctup, buffer, snapshot);
+			HeapCheckForSerializableConflictOut(valid, scan->rs_base.rs_rd,
+												&loctup, buffer, snapshot);
 
-		if (valid)
-			scan->rs_vistuples[ntup++] = lineoff;
+			if (valid)
+				scan->rs_vistuples[ntup++] = lineoff;
+		}
+	}
+	else
+	{
+		for (lineoff = FirstOffsetNumber; lineoff <= lines; lineoff++)
+		{
+			ItemId		lpp = PageGetItemId(page, lineoff);
+			HeapTupleData loctup;
+			bool		valid;
+
+			if (!ItemIdIsNormal(lpp))
+				continue;
+
+			loctup.t_tableOid = RelationGetRelid(scan->rs_base.rs_rd);
+			loctup.t_data = (HeapTupleHeader) PageGetItem(page, lpp);
+			loctup.t_len = ItemIdGetLength(lpp);
+			ItemPointerSet(&(loctup.t_self), block, lineoff);
+
+			if (all_visible)
+				valid = true;
+			else
+				valid = HeapTupleSatisfiesVisibility(&loctup, snapshot, buffer);
+
+			HeapCheckForSerializableConflictOut(valid, scan->rs_base.rs_rd,
+												&loctup, buffer, snapshot);
+
+			if (valid)
+				scan->rs_vistuples[ntup++] = lineoff;
+		}
 	}
 
 	LockBuffer(buffer, BUFFER_LOCK_UNLOCK);
