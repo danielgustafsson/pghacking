@@ -60,7 +60,7 @@ static LLVMValueRef BuildV1Call(LLVMJitContext *context, LLVMBuilderRef b,
 static LLVMValueRef build_EvalXFuncInt(LLVMBuilderRef b, LLVMModuleRef mod,
 									   const char *funcname,
 									   LLVMValueRef v_state,
-									   ExprEvalStep *op,
+									   LLVMValueRef v_opp,
 									   int natts, LLVMValueRef *v_args);
 static LLVMValueRef create_LifetimeEnd(LLVMModuleRef mod);
 
@@ -92,6 +92,7 @@ llvm_compile_expr(ExprState *state)
 	LLVMValueRef v_state;
 	LLVMValueRef v_econtext;
 	LLVMValueRef v_parent;
+	LLVMValueRef v_steps;
 
 	/* returnvalue */
 	LLVMValueRef v_isnullp;
@@ -175,6 +176,9 @@ llvm_compile_expr(ExprState *state)
 	v_parent = l_load_struct_gep(b, v_state,
 								 FIELDNO_EXPRSTATE_PARENT,
 								 "v.state.parent");
+	v_steps = l_load_struct_gep(b, v_state,
+								FIELDNO_EXPRSTATE_STEPS,
+								"v.state.steps");
 
 	/* build global slots */
 	v_scanslot = l_load_struct_gep(b, v_econtext,
@@ -236,6 +240,8 @@ llvm_compile_expr(ExprState *state)
 	{
 		ExprEvalStep *op;
 		ExprEvalOp	opcode;
+		LLVMValueRef v_opno;
+		LLVMValueRef v_opp;
 		LLVMValueRef v_resvaluep;
 		LLVMValueRef v_resnullp;
 
@@ -243,6 +249,9 @@ llvm_compile_expr(ExprState *state)
 
 		op = &state->steps[opno];
 		opcode = ExecEvalStepOp(state, op);
+
+		v_opno = l_int32_const(opno),
+		v_opp = LLVMBuildGEP(b, v_steps, &v_opno, 1, "");
 
 		v_resvaluep = l_ptr_const(op->resvalue, l_ptr(TypeSizeT));
 		v_resnullp = l_ptr_const(op->resnull, l_ptr(TypeStorageBool));
@@ -402,7 +411,7 @@ llvm_compile_expr(ExprState *state)
 						v_slot = v_scanslot;
 
 					build_EvalXFunc(b, mod, "ExecEvalSysVar",
-									v_state, op, v_econtext, v_slot);
+									v_state, v_opp, v_econtext, v_slot);
 
 					LLVMBuildBr(b, opblocks[opno + 1]);
 					break;
@@ -410,7 +419,7 @@ llvm_compile_expr(ExprState *state)
 
 			case EEOP_WHOLEROW:
 				build_EvalXFunc(b, mod, "ExecEvalWholeRowVar",
-								v_state, op, v_econtext);
+								v_state, v_opp, v_econtext);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
@@ -624,14 +633,14 @@ llvm_compile_expr(ExprState *state)
 
 			case EEOP_FUNCEXPR_FUSAGE:
 				build_EvalXFunc(b, mod, "ExecEvalFuncExprFusage",
-								v_state, op, v_econtext);
+								v_state, v_opp, v_econtext);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
 
 			case EEOP_FUNCEXPR_STRICT_FUSAGE:
 				build_EvalXFunc(b, mod, "ExecEvalFuncExprStrictFusage",
-								v_state, op, v_econtext);
+								v_state, v_opp, v_econtext);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
@@ -992,13 +1001,13 @@ llvm_compile_expr(ExprState *state)
 
 			case EEOP_NULLTEST_ROWISNULL:
 				build_EvalXFunc(b, mod, "ExecEvalRowNull",
-								v_state, op, v_econtext);
+								v_state, v_opp, v_econtext);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
 			case EEOP_NULLTEST_ROWISNOTNULL:
 				build_EvalXFunc(b, mod, "ExecEvalRowNotNull",
-								v_state, op, v_econtext);
+								v_state, v_opp, v_econtext);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
@@ -1069,13 +1078,13 @@ llvm_compile_expr(ExprState *state)
 
 			case EEOP_PARAM_EXEC:
 				build_EvalXFunc(b, mod, "ExecEvalParamExec",
-								v_state, op, v_econtext);
+								v_state, v_opp, v_econtext);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
 			case EEOP_PARAM_EXTERN:
 				build_EvalXFunc(b, mod, "ExecEvalParamExtern",
-								v_state, op, v_econtext);
+								v_state, v_opp, v_econtext);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
@@ -1090,7 +1099,7 @@ llvm_compile_expr(ExprState *state)
 										 LLVMPointerType(v_functype, 0));
 
 					v_params[0] = v_state;
-					v_params[1] = l_ptr_const(op, l_ptr(StructExprEvalStep));
+					v_params[1] = v_opp;
 					v_params[2] = v_econtext;
 					LLVMBuildCall(b,
 								  v_func,
@@ -1141,7 +1150,7 @@ llvm_compile_expr(ExprState *state)
 										 LLVMPointerType(v_functype, 0));
 
 					v_params[0] = v_state;
-					v_params[1] = l_ptr_const(op, l_ptr(StructExprEvalStep));
+					v_params[1] = v_opp;
 					v_params[2] = v_econtext;
 					LLVMBuildCall(b,
 								  v_func,
@@ -1557,37 +1566,37 @@ llvm_compile_expr(ExprState *state)
 
 			case EEOP_SQLVALUEFUNCTION:
 				build_EvalXFunc(b, mod, "ExecEvalSQLValueFunction",
-								v_state, op);
+								v_state, v_opp);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
 			case EEOP_CURRENTOFEXPR:
 				build_EvalXFunc(b, mod, "ExecEvalCurrentOfExpr",
-								v_state, op);
+								v_state, v_opp);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
 			case EEOP_NEXTVALUEEXPR:
 				build_EvalXFunc(b, mod, "ExecEvalNextValueExpr",
-								v_state, op);
+								v_state, v_opp);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
 			case EEOP_ARRAYEXPR:
 				build_EvalXFunc(b, mod, "ExecEvalArrayExpr",
-								v_state, op);
+								v_state, v_opp);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
 			case EEOP_ARRAYCOERCE:
 				build_EvalXFunc(b, mod, "ExecEvalArrayCoerce",
-								v_state, op, v_econtext);
+								v_state, v_opp, v_econtext);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
 			case EEOP_ROW:
 				build_EvalXFunc(b, mod, "ExecEvalRow",
-								v_state, op);
+								v_state, v_opp);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
@@ -1742,25 +1751,25 @@ llvm_compile_expr(ExprState *state)
 
 			case EEOP_MINMAX:
 				build_EvalXFunc(b, mod, "ExecEvalMinMax",
-								v_state, op);
+								v_state, v_opp);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
 			case EEOP_FIELDSELECT:
 				build_EvalXFunc(b, mod, "ExecEvalFieldSelect",
-								v_state, op, v_econtext);
+								v_state, v_opp, v_econtext);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
 			case EEOP_FIELDSTORE_DEFORM:
 				build_EvalXFunc(b, mod, "ExecEvalFieldStoreDeForm",
-								v_state, op, v_econtext);
+								v_state, v_opp, v_econtext);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
 			case EEOP_FIELDSTORE_FORM:
 				build_EvalXFunc(b, mod, "ExecEvalFieldStoreForm",
-								v_state, op, v_econtext);
+								v_state, v_opp, v_econtext);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
@@ -1820,37 +1829,37 @@ llvm_compile_expr(ExprState *state)
 
 			case EEOP_DOMAIN_NOTNULL:
 				build_EvalXFunc(b, mod, "ExecEvalConstraintNotNull",
-								v_state, op);
+								v_state, v_opp);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
 			case EEOP_DOMAIN_CHECK:
 				build_EvalXFunc(b, mod, "ExecEvalConstraintCheck",
-								v_state, op);
+								v_state, v_opp);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
 			case EEOP_CONVERT_ROWTYPE:
 				build_EvalXFunc(b, mod, "ExecEvalConvertRowtype",
-								v_state, op, v_econtext);
+								v_state, v_opp, v_econtext);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
 			case EEOP_SCALARARRAYOP:
 				build_EvalXFunc(b, mod, "ExecEvalScalarArrayOp",
-								v_state, op);
+								v_state, v_opp);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
 			case EEOP_HASHED_SCALARARRAYOP:
 				build_EvalXFunc(b, mod, "ExecEvalHashedScalarArrayOp",
-								v_state, op, v_econtext);
+								v_state, v_opp, v_econtext);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
 			case EEOP_XMLEXPR:
 				build_EvalXFunc(b, mod, "ExecEvalXmlExpr",
-								v_state, op);
+								v_state, v_opp);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
@@ -1888,7 +1897,7 @@ llvm_compile_expr(ExprState *state)
 
 			case EEOP_GROUPING_FUNC:
 				build_EvalXFunc(b, mod, "ExecEvalGroupingFunc",
-								v_state, op);
+								v_state, v_opp);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
@@ -1924,7 +1933,7 @@ llvm_compile_expr(ExprState *state)
 
 			case EEOP_SUBPLAN:
 				build_EvalXFunc(b, mod, "ExecEvalSubPlan",
-								v_state, op, v_econtext);
+								v_state, v_opp, v_econtext);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
@@ -2402,13 +2411,13 @@ llvm_compile_expr(ExprState *state)
 
 			case EEOP_AGG_ORDERED_TRANS_DATUM:
 				build_EvalXFunc(b, mod, "ExecEvalAggOrderedTransDatum",
-								v_state, op, v_econtext);
+								v_state, v_opp, v_econtext);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
 			case EEOP_AGG_ORDERED_TRANS_TUPLE:
 				build_EvalXFunc(b, mod, "ExecEvalAggOrderedTransTuple",
-								v_state, op, v_econtext);
+								v_state, v_opp, v_econtext);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
@@ -2522,7 +2531,7 @@ BuildV1Call(LLVMJitContext *context, LLVMBuilderRef b,
  */
 static LLVMValueRef
 build_EvalXFuncInt(LLVMBuilderRef b, LLVMModuleRef mod, const char *funcname,
-				   LLVMValueRef v_state, ExprEvalStep *op,
+				   LLVMValueRef v_state, LLVMValueRef v_opp,
 				   int nargs, LLVMValueRef *v_args)
 {
 	LLVMValueRef v_fn = llvm_pg_func(mod, funcname);
@@ -2538,7 +2547,7 @@ build_EvalXFuncInt(LLVMBuilderRef b, LLVMModuleRef mod, const char *funcname,
 	params = palloc(sizeof(LLVMValueRef) * (2 + nargs));
 
 	params[argno++] = v_state;
-	params[argno++] = l_ptr_const(op, l_ptr(StructExprEvalStep));
+	params[argno++] = v_opp;
 
 	for (int i = 0; i < nargs; i++)
 		params[argno++] = v_args[i];
