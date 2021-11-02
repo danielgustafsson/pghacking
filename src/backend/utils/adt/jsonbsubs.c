@@ -175,11 +175,10 @@ jsonb_subscript_transform(SubscriptingRef *sbsref,
  * rest of the SubscriptingRef sequence).
  */
 static bool
-jsonb_subscript_check_subscripts(ExprState *state,
-								 ExprEvalStep *op,
-								 ExprContext *econtext)
+jsonb_subscript_check_subscripts(ExprContext *econtext,
+								 SubscriptingRefState *sbsrefstate,
+								 NullableDatum *result)
 {
-	SubscriptingRefState *sbsrefstate = op->d.sbsref_subscript.state;
 	JsonbSubWorkspace *workspace = (JsonbSubWorkspace *) sbsrefstate->workspace;
 
 	/*
@@ -205,7 +204,7 @@ jsonb_subscript_check_subscripts(ExprState *state,
 					ereport(ERROR,
 							(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 							 errmsg("jsonb subscript in assignment must not be null")));
-				*op->resnull = true;
+				result->isnull = true;
 				return false;
 			}
 
@@ -235,22 +234,21 @@ jsonb_subscript_check_subscripts(ExprState *state,
  * we set fetch_strict to true).
  */
 static void
-jsonb_subscript_fetch(ExprState *state,
-					  ExprEvalStep *op,
-					  ExprContext *econtext)
+jsonb_subscript_fetch(ExprContext *econtext,
+					  SubscriptingRefState *sbsrefstate,
+					  NullableDatum *result)
 {
-	SubscriptingRefState *sbsrefstate = op->d.sbsref.state;
 	JsonbSubWorkspace *workspace = (JsonbSubWorkspace *) sbsrefstate->workspace;
 	Jsonb	   *jsonbSource;
 
 	/* Should not get here if source jsonb (or any subscript) is null */
-	Assert(!(*op->resnull));
+	Assert(!(result->isnull));
 
-	jsonbSource = DatumGetJsonbP(*op->resvalue);
-	*op->resvalue = jsonb_get_element(jsonbSource,
+	jsonbSource = DatumGetJsonbP(result->value);
+	result->value = jsonb_get_element(jsonbSource,
 									  workspace->index,
 									  sbsrefstate->numupper,
-									  op->resnull,
+									  &result->isnull,
 									  false);
 }
 
@@ -261,11 +259,10 @@ jsonb_subscript_fetch(ExprState *state,
  * SubscriptingRefState's replacevalue/replacenull.
  */
 static void
-jsonb_subscript_assign(ExprState *state,
-					   ExprEvalStep *op,
-					   ExprContext *econtext)
+jsonb_subscript_assign(ExprContext *econtext,
+					   SubscriptingRefState *sbsrefstate,
+					   NullableDatum *result)
 {
-	SubscriptingRefState *sbsrefstate = op->d.sbsref.state;
 	JsonbSubWorkspace *workspace = (JsonbSubWorkspace *) sbsrefstate->workspace;
 	Jsonb	   *jsonbSource;
 	JsonbValue	replacevalue;
@@ -280,7 +277,7 @@ jsonb_subscript_assign(ExprState *state,
 	 * In case if the input container is null, set up an empty jsonb and
 	 * proceed with the assignment.
 	 */
-	if (*op->resnull)
+	if (result->isnull)
 	{
 		JsonbValue	newSource;
 
@@ -302,16 +299,16 @@ jsonb_subscript_assign(ExprState *state,
 		}
 
 		jsonbSource = JsonbValueToJsonb(&newSource);
-		*op->resnull = false;
+		result->isnull = false;
 	}
 	else
-		jsonbSource = DatumGetJsonbP(*op->resvalue);
+		jsonbSource = DatumGetJsonbP(result->value);
 
-	*op->resvalue = jsonb_set_element(jsonbSource,
+	result->value = jsonb_set_element(jsonbSource,
 									  workspace->index,
 									  sbsrefstate->numupper,
 									  &replacevalue);
-	/* The result is never NULL, so no need to change *op->resnull */
+	/* The result is never NULL, so no need to change result->isnull */
 }
 
 /*
@@ -323,13 +320,11 @@ jsonb_subscript_assign(ExprState *state,
  * prevvalue/prevnull fields.
  */
 static void
-jsonb_subscript_fetch_old(ExprState *state,
-						  ExprEvalStep *op,
-						  ExprContext *econtext)
+jsonb_subscript_fetch_old(ExprContext *econtext,
+						  SubscriptingRefState *sbsrefstate,
+						  NullableDatum *result)
 {
-	SubscriptingRefState *sbsrefstate = op->d.sbsref.state;
-
-	if (*op->resnull)
+	if (result->isnull)
 	{
 		/* whole jsonb is null, so any element is too */
 		sbsrefstate->prevvalue = (Datum) 0;
@@ -337,7 +332,7 @@ jsonb_subscript_fetch_old(ExprState *state,
 	}
 	else
 	{
-		Jsonb	   *jsonbSource = DatumGetJsonbP(*op->resvalue);
+		Jsonb	   *jsonbSource = DatumGetJsonbP(result->value);
 
 		sbsrefstate->prevvalue = jsonb_get_element(jsonbSource,
 												   sbsrefstate->upperindex,

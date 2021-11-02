@@ -17,6 +17,7 @@
 /* Forward declarations, to avoid including other headers */
 struct Bitmapset;
 struct ExprState;
+struct ExprContext;
 struct Param;
 struct ParseState;
 
@@ -68,10 +69,10 @@ struct ParseState;
  *	  in trying to fetch the parameter value, and should report an invalid
  *	  parameter instead.
  *
- *	  If paramCompile isn't null, then it controls what execExpr.c compiles
- *	  for PARAM_EXTERN Param nodes --- typically, this hook would emit a
- *	  EEOP_PARAM_CALLBACK step.  This allows unnecessary work to be
- *	  optimized away in compiled expressions.
+ *	  If paramCompile isn't null, execExpr.c generates a EEOP_PARAM_CALLBACK
+ *	  step for the parameter, which in turn will call the function returned by
+ *	  the ParamCompileHook.  This allows unnecessary work to be optimized away
+ *	  in compiled expressions.
  *
  *	  If parserSetup isn't null, then it is called to re-instantiate the
  *	  original parsing hooks when a query needs to be re-parsed/planned.
@@ -100,11 +101,12 @@ typedef struct ParamListInfoData *ParamListInfo;
 typedef ParamExternData *(*ParamFetchHook) (ParamListInfo params,
 											int paramid, bool speculative,
 											ParamExternData *workspace);
-
-typedef void (*ParamCompileHook) (ParamListInfo params, struct Param *param,
-								  struct ExprState *state,
-								  Datum *resv, bool *resnull);
-
+typedef void (*ExecEvalParamCallback)(void *callback_private,
+									  struct ExprContext *econtext,
+									  const struct Param *param,
+									  NullableDatum *result);
+typedef ExecEvalParamCallback (*ParamCompileHook) (ParamListInfo params, const struct Param *param,
+												   void **callback_private);
 typedef void (*ParserSetupHook) (struct ParseState *pstate, void *arg);
 
 typedef struct ParamListInfoData

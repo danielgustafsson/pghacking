@@ -36,6 +36,7 @@
 #include "fmgr.h"
 #include "nodes/execnodes.h"
 #include "nodes/memnodes.h"
+#include "nodes/subscripting.h"
 #include "utils/expandeddatum.h"
 #include "utils/palloc.h"
 
@@ -49,8 +50,9 @@ PGFunction	TypePGFunction;
 size_t		TypeSizeT;
 bool		TypeStorageBool;
 ExprStateEvalFunc TypeExprStateEvalFunc;
-ExecEvalSubroutine TypeExecEvalSubroutine;
-ExecEvalBoolSubroutine TypeExecEvalBoolSubroutine;
+ExecEvalParamCallback TypeExecEvalParamCallback;
+ExecEvalSubscriptCallback TypeExecEvalSubscriptCallback;
+ExecEvalSubscriptCheckCallback TypeExecEvalSubscriptCheckCallback;
 
 NullableDatum StructNullableDatum;
 AggState	StructAggState;
@@ -58,6 +60,9 @@ AggStatePerGroupData StructAggStatePerGroupData;
 AggStatePerTransData StructAggStatePerTransData;
 ExprContext StructExprContext;
 ExprEvalStep StructExprEvalStep;
+struct ExprEvalStepParamCallback StructExprEvalStepParamCallback;
+struct ExprEvalStepSubscriptsCheck StructExprEvalStepSubscriptsCheck;
+struct ExprEvalStepSubscripts StructExprEvalStepSubscripts;
 ExprState	StructExprState;
 FunctionCallInfoBaseData StructFunctionCallInfoData;
 HeapTupleData StructHeapTupleData;

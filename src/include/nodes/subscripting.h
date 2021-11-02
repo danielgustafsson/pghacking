@@ -16,6 +16,7 @@
 #include "nodes/primnodes.h"
 
 /* Forward declarations, to avoid including other headers */
+struct ExprContext;
 struct ParseState;
 struct SubscriptingRefState;
 struct SubscriptExecSteps;
@@ -111,6 +112,8 @@ typedef void (*SubscriptTransform) (SubscriptingRef *sbsref,
  *
  * The methods to be provided are:
  *
+ * FIXME: adjust variable names
+ *
  * sbs_check_subscripts: examine the just-computed subscript values available
  * in sbsrefstate's arrays, and possibly convert them into another form
  * (stored in sbsrefstate->workspace).  Return TRUE to continue with
@@ -153,6 +156,24 @@ typedef void (*SubscriptTransform) (SubscriptingRef *sbsref,
 typedef void (*SubscriptExecSetup) (const SubscriptingRef *sbsref,
 									struct SubscriptingRefState *sbsrefstate,
 									struct SubscriptExecSteps *methods);
+
+typedef void (*ExecEvalSubscriptCallback)(struct ExprContext *econtext,
+										  struct SubscriptingRefState *sbsrefstate,
+										  NullableDatum *result);
+
+typedef bool (*ExecEvalSubscriptCheckCallback)(struct ExprContext *econtext,
+											   struct SubscriptingRefState *sbsrefstate,
+											   NullableDatum *result);
+
+/* Execution step methods used for SubscriptingRef */
+typedef struct SubscriptExecSteps
+{
+	/* See nodes/subscripting.h for more detail about these */
+	ExecEvalSubscriptCheckCallback sbs_check_subscripts;	/* process subscripts */
+	ExecEvalSubscriptCallback sbs_fetch;	/* fetch an element */
+	ExecEvalSubscriptCallback sbs_assign;	/* assign to an element */
+	ExecEvalSubscriptCallback sbs_fetch_old;	/* fetch old value for assignment */
+} SubscriptExecSteps;
 
 /* Struct returned by the SQL-visible subscript handler function */
 typedef struct SubscriptRoutines

@@ -177,11 +177,10 @@ array_subscript_transform(SubscriptingRef *sbsref,
  * sbsrefstate->workspace arrays.
  */
 static bool
-array_subscript_check_subscripts(ExprState *state,
-								 ExprEvalStep *op,
-								 ExprContext *econtext)
+array_subscript_check_subscripts(struct ExprContext *econtext,
+								 SubscriptingRefState *sbsrefstate,
+								 NullableDatum *result)
 {
-	SubscriptingRefState *sbsrefstate = op->d.sbsref_subscript.state;
 	ArraySubWorkspace *workspace = (ArraySubWorkspace *) sbsrefstate->workspace;
 
 	/* Process upper subscripts */
@@ -196,7 +195,7 @@ array_subscript_check_subscripts(ExprState *state,
 					ereport(ERROR,
 							(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 							 errmsg("array subscript in assignment must not be null")));
-				*op->resnull = true;
+				result->isnull = true;
 				return false;
 			}
 			workspace->upperindex[i] = DatumGetInt32(sbsrefstate->upperindex[i]);
@@ -215,7 +214,7 @@ array_subscript_check_subscripts(ExprState *state,
 					ereport(ERROR,
 							(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 							 errmsg("array subscript in assignment must not be null")));
-				*op->resnull = true;
+				result->isnull = true;
 				return false;
 			}
 			workspace->lowerindex[i] = DatumGetInt32(sbsrefstate->lowerindex[i]);
@@ -233,24 +232,23 @@ array_subscript_check_subscripts(ExprState *state,
  * workspace array.
  */
 static void
-array_subscript_fetch(ExprState *state,
-					  ExprEvalStep *op,
-					  ExprContext *econtext)
+array_subscript_fetch(struct ExprContext *econtext,
+					  SubscriptingRefState *sbsrefstate,
+					  NullableDatum *result)
 {
-	SubscriptingRefState *sbsrefstate = op->d.sbsref.state;
 	ArraySubWorkspace *workspace = (ArraySubWorkspace *) sbsrefstate->workspace;
 
 	/* Should not get here if source array (or any subscript) is null */
-	Assert(!(*op->resnull));
+	Assert(!(result->isnull));
 
-	*op->resvalue = array_get_element(*op->resvalue,
+	result->value = array_get_element(result->value,
 									  sbsrefstate->numupper,
 									  workspace->upperindex,
 									  workspace->refattrlength,
 									  workspace->refelemlength,
 									  workspace->refelembyval,
 									  workspace->refelemalign,
-									  op->resnull);
+									  &result->isnull);
 }
 
 /*
@@ -261,17 +259,16 @@ array_subscript_fetch(ExprState *state,
  * workspace array.
  */
 static void
-array_subscript_fetch_slice(ExprState *state,
-							ExprEvalStep *op,
-							ExprContext *econtext)
+array_subscript_fetch_slice(struct ExprContext *econtext,
+							SubscriptingRefState *sbsrefstate,
+							NullableDatum *result)
 {
-	SubscriptingRefState *sbsrefstate = op->d.sbsref.state;
 	ArraySubWorkspace *workspace = (ArraySubWorkspace *) sbsrefstate->workspace;
 
 	/* Should not get here if source array (or any subscript) is null */
-	Assert(!(*op->resnull));
+	Assert(!(result->isnull));
 
-	*op->resvalue = array_get_slice(*op->resvalue,
+	result->value = array_get_slice(result->value,
 									sbsrefstate->numupper,
 									workspace->upperindex,
 									workspace->lowerindex,
@@ -281,7 +278,7 @@ array_subscript_fetch_slice(ExprState *state,
 									workspace->refelemlength,
 									workspace->refelembyval,
 									workspace->refelemalign);
-	/* The slice is never NULL, so no need to change *op->resnull */
+	/* The slice is never NULL, so no need to change result->isnull */
 }
 
 /*
@@ -291,13 +288,12 @@ array_subscript_fetch_slice(ExprState *state,
  * SubscriptingRefState's replacevalue/replacenull.
  */
 static void
-array_subscript_assign(ExprState *state,
-					   ExprEvalStep *op,
-					   ExprContext *econtext)
+array_subscript_assign(struct ExprContext *econtext,
+					   SubscriptingRefState *sbsrefstate,
+					   NullableDatum *result)
 {
-	SubscriptingRefState *sbsrefstate = op->d.sbsref.state;
 	ArraySubWorkspace *workspace = (ArraySubWorkspace *) sbsrefstate->workspace;
-	Datum		arraySource = *op->resvalue;
+	Datum		arraySource = result->value;
 
 	/*
 	 * For an assignment to a fixed-length array type, both the original array
@@ -306,7 +302,7 @@ array_subscript_assign(ExprState *state,
 	 */
 	if (workspace->refattrlength > 0)
 	{
-		if (*op->resnull || sbsrefstate->replacenull)
+		if (result->isnull || sbsrefstate->replacenull)
 			return;
 	}
 
@@ -316,13 +312,13 @@ array_subscript_assign(ExprState *state,
 	 * element will result in a singleton array value.  It does not matter
 	 * whether the new element is NULL.
 	 */
-	if (*op->resnull)
+	if (result->isnull)
 	{
 		arraySource = PointerGetDatum(construct_empty_array(workspace->refelemtype));
-		*op->resnull = false;
+		result->isnull = false;
 	}
 
-	*op->resvalue = array_set_element(arraySource,
+	result->value = array_set_element(arraySource,
 									  sbsrefstate->numupper,
 									  workspace->upperindex,
 									  sbsrefstate->replacevalue,
@@ -331,7 +327,7 @@ array_subscript_assign(ExprState *state,
 									  workspace->refelemlength,
 									  workspace->refelembyval,
 									  workspace->refelemalign);
-	/* The result is never NULL, so no need to change *op->resnull */
+	/* The result is never NULL, so no need to change result->isnull */
 }
 
 /*
@@ -341,13 +337,12 @@ array_subscript_assign(ExprState *state,
  * SubscriptingRefState's replacevalue/replacenull.
  */
 static void
-array_subscript_assign_slice(ExprState *state,
-							 ExprEvalStep *op,
-							 ExprContext *econtext)
+array_subscript_assign_slice(struct ExprContext *econtext,
+							 SubscriptingRefState *sbsrefstate,
+							 NullableDatum *result)
 {
-	SubscriptingRefState *sbsrefstate = op->d.sbsref.state;
 	ArraySubWorkspace *workspace = (ArraySubWorkspace *) sbsrefstate->workspace;
-	Datum		arraySource = *op->resvalue;
+	Datum		arraySource = result->value;
 
 	/*
 	 * For an assignment to a fixed-length array type, both the original array
@@ -356,7 +351,7 @@ array_subscript_assign_slice(ExprState *state,
 	 */
 	if (workspace->refattrlength > 0)
 	{
-		if (*op->resnull || sbsrefstate->replacenull)
+		if (result->isnull || sbsrefstate->replacenull)
 			return;
 	}
 
@@ -366,13 +361,13 @@ array_subscript_assign_slice(ExprState *state,
 	 * element will result in a singleton array value.  It does not matter
 	 * whether the new element is NULL.
 	 */
-	if (*op->resnull)
+	if (result->isnull)
 	{
 		arraySource = PointerGetDatum(construct_empty_array(workspace->refelemtype));
-		*op->resnull = false;
+		result->isnull = false;
 	}
 
-	*op->resvalue = array_set_slice(arraySource,
+	result->value = array_set_slice(arraySource,
 									sbsrefstate->numupper,
 									workspace->upperindex,
 									workspace->lowerindex,
@@ -384,7 +379,7 @@ array_subscript_assign_slice(ExprState *state,
 									workspace->refelemlength,
 									workspace->refelembyval,
 									workspace->refelemalign);
-	/* The result is never NULL, so no need to change *op->resnull */
+	/* The result is never NULL, so no need to change result->value */
 }
 
 /*
@@ -396,21 +391,20 @@ array_subscript_assign_slice(ExprState *state,
  * prevvalue/prevnull fields.
  */
 static void
-array_subscript_fetch_old(ExprState *state,
-						  ExprEvalStep *op,
-						  ExprContext *econtext)
+array_subscript_fetch_old(struct ExprContext *econtext,
+						  SubscriptingRefState *sbsrefstate,
+						  NullableDatum *result)
 {
-	SubscriptingRefState *sbsrefstate = op->d.sbsref.state;
 	ArraySubWorkspace *workspace = (ArraySubWorkspace *) sbsrefstate->workspace;
 
-	if (*op->resnull)
+	if (result->isnull)
 	{
 		/* whole array is null, so any element is too */
 		sbsrefstate->prevvalue = (Datum) 0;
 		sbsrefstate->prevnull = true;
 	}
 	else
-		sbsrefstate->prevvalue = array_get_element(*op->resvalue,
+		sbsrefstate->prevvalue = array_get_element(result->value,
 												   sbsrefstate->numupper,
 												   workspace->upperindex,
 												   workspace->refattrlength,
@@ -436,14 +430,13 @@ array_subscript_fetch_old(ExprState *state,
  * reachable, however.
  */
 static void
-array_subscript_fetch_old_slice(ExprState *state,
-								ExprEvalStep *op,
-								ExprContext *econtext)
+array_subscript_fetch_old_slice(struct ExprContext *econtext,
+								SubscriptingRefState *sbsrefstate,
+								NullableDatum *result)
 {
-	SubscriptingRefState *sbsrefstate = op->d.sbsref.state;
 	ArraySubWorkspace *workspace = (ArraySubWorkspace *) sbsrefstate->workspace;
 
-	if (*op->resnull)
+	if (result->isnull)
 	{
 		/* whole array is null, so any slice is too */
 		sbsrefstate->prevvalue = (Datum) 0;
@@ -451,7 +444,7 @@ array_subscript_fetch_old_slice(ExprState *state,
 	}
 	else
 	{
-		sbsrefstate->prevvalue = array_get_slice(*op->resvalue,
+		sbsrefstate->prevvalue = array_get_slice(result->value,
 												 sbsrefstate->numupper,
 												 workspace->upperindex,
 												 workspace->lowerindex,

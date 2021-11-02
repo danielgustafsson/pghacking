@@ -242,6 +242,7 @@ llvm_compile_expr(ExprState *state)
 		ExprEvalOp	opcode;
 		LLVMValueRef v_opno;
 		LLVMValueRef v_opp;
+		LLVMValueRef v_opdatap;
 		LLVMValueRef v_resvaluep;
 		LLVMValueRef v_resnullp;
 
@@ -252,6 +253,9 @@ llvm_compile_expr(ExprState *state)
 
 		v_opno = l_int32_const(opno),
 		v_opp = LLVMBuildGEP(b, v_steps, &v_opno, 1, "");
+		v_opdatap = LLVMBuildStructGEP(b, v_opp,
+									   FIELDNO_EXPREVALSTEP_D,
+									   "");
 
 		v_resvaluep = l_ptr_const(op->resvalue, l_ptr(TypeSizeT));
 		v_resnullp = l_ptr_const(op->resnull, l_ptr(TypeStorageBool));
@@ -1098,20 +1102,49 @@ llvm_compile_expr(ExprState *state)
 
 			case EEOP_PARAM_CALLBACK:
 				{
-					LLVMTypeRef v_functype;
+					LLVMValueRef v_cparam_data;
 					LLVMValueRef v_func;
-					LLVMValueRef v_params[3];
+					LLVMValueRef v_funcarg;
+					LLVMValueRef v_opparamp;
+					LLVMValueRef v_params[4];
+					LLVMValueRef v_resultp;
 
-					v_functype = llvm_pg_var_func_type("TypeExecEvalSubroutine");
-					v_func = l_ptr_const(op->d.cparam.paramfunc,
-										 LLVMPointerType(v_functype, 0));
+					v_cparam_data =
+						LLVMBuildBitCast(b, v_opdatap,
+										 l_ptr(llvm_pg_var_type("StructExprEvalStepParamCallback")), "");
+					v_func =
+						l_load_struct_gep(b, v_cparam_data,
+										  FIELDNO_EXPREVALSTEPPARAMCALLBACK_PARAMFUNC,
+										  "");
+					v_funcarg =
+						l_load_struct_gep(b, v_cparam_data,
+										  FIELDNO_EXPREVALSTEPPARAMCALLBACK_PARAMARG,
+										  "");
+					v_opparamp =
+						LLVMBuildStructGEP(b, v_cparam_data,
+										   FIELDNO_EXPREVALSTEPPARAMCALLBACK_PARAM,
+										   "");
 
-					v_params[0] = v_state;
-					v_params[1] = v_opp;
-					v_params[2] = v_econtext;
+					v_resultp = LLVMBuildAlloca(b, StructNullableDatum, "");
+
+					v_params[0] = v_funcarg;
+					v_params[1] = v_econtext;
+					v_params[2] = v_opparamp;
+					v_params[3] = v_resultp;
 					LLVMBuildCall(b,
 								  v_func,
 								  v_params, lengthof(v_params), "");
+
+					LLVMBuildStore(b,
+								   l_load_struct_gep(b, v_resultp,
+													 FIELDNO_NULLABLE_DATUM_ISNULL,
+													 ""),
+								   v_resnullp);
+					LLVMBuildStore(b,
+								   l_load_struct_gep(b, v_resultp,
+													 FIELDNO_NULLABLE_DATUM_DATUM,
+													 ""),
+								   v_resvaluep);
 
 					LLVMBuildBr(b, opblocks[opno + 1]);
 					break;
@@ -1120,22 +1153,58 @@ llvm_compile_expr(ExprState *state)
 			case EEOP_SBSREF_SUBSCRIPTS:
 				{
 					int			jumpdone = op->d.sbsref_subscript.jumpdone;
-					LLVMTypeRef v_functype;
+					LLVMValueRef v_cparam_data;
 					LLVMValueRef v_func;
+					LLVMValueRef v_sbs_state;
+					LLVMValueRef v_resultp;
 					LLVMValueRef v_params[3];
 					LLVMValueRef v_ret;
 
-					v_functype = llvm_pg_var_func_type("TypeExecEvalBoolSubroutine");
-					v_func = l_ptr_const(op->d.sbsref_subscript.subscriptfunc,
-										 LLVMPointerType(v_functype, 0));
+					v_cparam_data =
+						LLVMBuildBitCast(b, v_opdatap,
+										 l_ptr(llvm_pg_var_type("StructExprEvalStepSubscriptsCheck")), "");
 
-					v_params[0] = v_state;
-					v_params[1] = l_ptr_const(op, l_ptr(StructExprEvalStep));
-					v_params[2] = v_econtext;
+					v_func =
+						l_load_struct_gep(b, v_cparam_data,
+										  FIELDNO_EXPREVALSTEPSUBSCRIPTS_CHECK_FUNC,
+										  "");
+					v_sbs_state =
+						l_load_struct_gep(b, v_cparam_data,
+										  FIELDNO_EXPREVALSTEPSUBSCRIPTS_CHECK_STATE,
+										  "");
+
+					v_resultp = LLVMBuildAlloca(b, StructNullableDatum, "");
+
+					LLVMBuildStore(b,
+								   LLVMBuildLoad(b, v_resnullp, ""),
+								   LLVMBuildStructGEP(b, v_resultp,
+													  FIELDNO_NULLABLE_DATUM_ISNULL,
+													  ""));
+					LLVMBuildStore(b,
+								   LLVMBuildLoad(b, v_resvaluep, ""),
+								   LLVMBuildStructGEP(b, v_resultp,
+													  FIELDNO_NULLABLE_DATUM_DATUM,
+													  ""));
+
+					v_params[0] = v_econtext;
+					v_params[1] = v_sbs_state;
+					v_params[2] = v_resultp;
+
 					v_ret = LLVMBuildCall(b,
 										  v_func,
 										  v_params, lengthof(v_params), "");
 					v_ret = LLVMBuildZExt(b, v_ret, TypeStorageBool, "");
+
+					LLVMBuildStore(b,
+								   l_load_struct_gep(b, v_resultp,
+													 FIELDNO_NULLABLE_DATUM_ISNULL,
+													 ""),
+								   v_resnullp);
+					LLVMBuildStore(b,
+								   l_load_struct_gep(b, v_resultp,
+													 FIELDNO_NULLABLE_DATUM_DATUM,
+													 ""),
+								   v_resvaluep);
 
 					LLVMBuildCondBr(b,
 									LLVMBuildICmp(b, LLVMIntEQ, v_ret,
@@ -1149,20 +1218,57 @@ llvm_compile_expr(ExprState *state)
 			case EEOP_SBSREF_ASSIGN:
 			case EEOP_SBSREF_FETCH:
 				{
-					LLVMTypeRef v_functype;
+					LLVMValueRef v_cparam_data;
 					LLVMValueRef v_func;
+					LLVMValueRef v_sbs_state;
+					LLVMValueRef v_resultp;
 					LLVMValueRef v_params[3];
 
-					v_functype = llvm_pg_var_func_type("TypeExecEvalSubroutine");
-					v_func = l_ptr_const(op->d.sbsref.subscriptfunc,
-										 LLVMPointerType(v_functype, 0));
+					v_cparam_data =
+						LLVMBuildBitCast(b, v_opdatap,
+										 l_ptr(llvm_pg_var_type("StructExprEvalStepSubscripts")), "");
 
-					v_params[0] = v_state;
-					v_params[1] = v_opp;
-					v_params[2] = v_econtext;
+					v_func =
+						l_load_struct_gep(b, v_cparam_data,
+										  FIELDNO_EXPREVALSTEPSUBSCRIPTS_CHECK_FUNC,
+										  "");
+					v_sbs_state =
+						l_load_struct_gep(b, v_cparam_data,
+										  FIELDNO_EXPREVALSTEPSUBSCRIPTS_CHECK_STATE,
+										  "");
+
+					v_resultp = LLVMBuildAlloca(b, StructNullableDatum, "");
+
+
+					LLVMBuildStore(b,
+								   LLVMBuildLoad(b, v_resnullp, ""),
+								   LLVMBuildStructGEP(b, v_resultp,
+													  FIELDNO_NULLABLE_DATUM_ISNULL,
+													  ""));
+					LLVMBuildStore(b,
+								   LLVMBuildLoad(b, v_resvaluep, ""),
+								   LLVMBuildStructGEP(b, v_resultp,
+													  FIELDNO_NULLABLE_DATUM_DATUM,
+													  ""));
+
+					v_params[0] = v_econtext;
+					v_params[1] = v_sbs_state;
+					v_params[2] = v_resultp;
+
 					LLVMBuildCall(b,
 								  v_func,
 								  v_params, lengthof(v_params), "");
+
+					LLVMBuildStore(b,
+								   l_load_struct_gep(b, v_resultp,
+													 FIELDNO_NULLABLE_DATUM_ISNULL,
+													 ""),
+								   v_resnullp);
+					LLVMBuildStore(b,
+								   l_load_struct_gep(b, v_resultp,
+													 FIELDNO_NULLABLE_DATUM_DATUM,
+													 ""),
+								   v_resvaluep);
 
 					LLVMBuildBr(b, opblocks[opno + 1]);
 					break;

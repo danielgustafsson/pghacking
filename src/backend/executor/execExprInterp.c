@@ -1150,7 +1150,12 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 		EEO_CASE(EEOP_PARAM_CALLBACK)
 		{
 			/* allow an extension module to supply a PARAM_EXTERN value */
-			op->d.cparam.paramfunc(state, op, econtext);
+			NullableDatum result;
+
+			op->d.cparam.paramfunc(op->d.cparam.paramarg, econtext,
+								   &op->d.cparam.param, &result);
+			*op->resvalue = result.value;
+			*op->resnull = result.isnull;
 			EEO_NEXT();
 		}
 
@@ -1527,8 +1532,17 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 
 		EEO_CASE(EEOP_SBSREF_SUBSCRIPTS)
 		{
+			NullableDatum result;
+			bool ret;
+
 			/* Precheck SubscriptingRef subscript(s) */
-			if (op->d.sbsref_subscript.subscriptfunc(state, op, econtext))
+			result.value = *op->resvalue;
+			result.isnull = *op->resnull;
+			ret = op->d.sbsref_subscript.subscriptfunc(econtext, op->d.sbsref_subscript.state, &result);
+			*op->resvalue = result.value;
+			*op->resnull = result.isnull;
+
+			if (ret)
 			{
 				EEO_NEXT();
 			}
@@ -1543,8 +1557,14 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 			EEO_CASE(EEOP_SBSREF_ASSIGN)
 			EEO_CASE(EEOP_SBSREF_FETCH)
 		{
+			NullableDatum result;
+
 			/* Perform a SubscriptingRef fetch or assignment */
-			op->d.sbsref.subscriptfunc(state, op, econtext);
+			result.value = *op->resvalue;
+			result.isnull = *op->resnull;
+			op->d.sbsref.subscriptfunc(econtext, op->d.sbsref_subscript.state, &result);
+			*op->resvalue = result.value;
+			*op->resnull = result.isnull;
 
 			EEO_NEXT();
 		}

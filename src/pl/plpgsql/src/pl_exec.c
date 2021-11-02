@@ -384,6 +384,7 @@ static ParamListInfo setup_param_list(PLpgSQL_execstate *estate,
 									  PLpgSQL_expr *expr);
 static ParamExternData *plpgsql_param_fetch(ParamListInfo params,
 											int paramid, bool speculative,
+<<<<<<< HEAD
 											ParamExternData *prm);
 static void plpgsql_param_compile(ParamListInfo params, Param *param,
 								  ExprState *state,
@@ -398,6 +399,21 @@ static void plpgsql_param_eval_generic(ExprState *state, ExprEvalStep *op,
 									   ExprContext *econtext);
 static void plpgsql_param_eval_generic_ro(ExprState *state, ExprEvalStep *op,
 										  ExprContext *econtext);
+=======
+											ParamExternData *workspace);
+static ExecEvalParamCallback plpgsql_param_compile(ParamListInfo params, const Param *param,
+												   void **private);
+static void plpgsql_param_eval_var(void *callback_private, ExprContext *econtext,
+								   const Param *param, NullableDatum *result);
+static void plpgsql_param_eval_var_ro(void *callback_private, ExprContext *econtext,
+									  const Param *param, NullableDatum *result);
+static void plpgsql_param_eval_recfield(void *callback_private, ExprContext *econtext,
+										const Param *param, NullableDatum *result);
+static void plpgsql_param_eval_generic(void *callback_private, ExprContext *econtext,
+									   const Param *param, NullableDatum *result);
+static void plpgsql_param_eval_generic_ro(void *callback_private, ExprContext *econtext,
+										  const Param *param, NullableDatum *result);
+>>>>>>> f57e1874a1 (WIP: expression eval: Decouple PARAM_CALLBACK interface more strongly from execExpr.c.)
 static void exec_move_row(PLpgSQL_execstate *estate,
 						  PLpgSQL_variable *target,
 						  HeapTuple tup, TupleDesc tupdesc);
@@ -6431,16 +6447,14 @@ plpgsql_param_fetch(ParamListInfo params,
 /*
  * plpgsql_param_compile		paramCompile callback for plpgsql parameters
  */
-static void
-plpgsql_param_compile(ParamListInfo params, Param *param,
-					  ExprState *state,
-					  Datum *resv, bool *resnull)
+static ExecEvalParamCallback
+plpgsql_param_compile(ParamListInfo params, const Param *param, void **private)
 {
 	PLpgSQL_execstate *estate;
 	PLpgSQL_expr *expr;
 	int			dno;
 	PLpgSQL_datum *datum;
-	ExprEvalStep scratch;
+	ExecEvalParamCallback paramfunc;
 
 	/* fetch back the hook data */
 	estate = (PLpgSQL_execstate *) params->paramFetchArg;
@@ -6453,10 +6467,6 @@ plpgsql_param_compile(ParamListInfo params, Param *param,
 	/* now we can access the target datum */
 	datum = estate->datums[dno];
 
-	scratch.opcode = EEOP_PARAM_CALLBACK;
-	scratch.resvalue = resv;
-	scratch.resnull = resnull;
-
 	/*
 	 * Select appropriate eval function.  It seems worth special-casing
 	 * DTYPE_VAR and DTYPE_RECFIELD for performance.  Also, we can determine
@@ -6468,36 +6478,27 @@ plpgsql_param_compile(ParamListInfo params, Param *param,
 	{
 		if (param != expr->expr_rw_param &&
 			((PLpgSQL_var *) datum)->datatype->typlen == -1)
-			scratch.d.cparam.paramfunc = plpgsql_param_eval_var_ro;
+			paramfunc = plpgsql_param_eval_var_ro;
 		else
-			scratch.d.cparam.paramfunc = plpgsql_param_eval_var;
+			paramfunc = plpgsql_param_eval_var;
 	}
 	else if (datum->dtype == PLPGSQL_DTYPE_RECFIELD)
-		scratch.d.cparam.paramfunc = plpgsql_param_eval_recfield;
+		paramfunc = plpgsql_param_eval_recfield;
 	else if (datum->dtype == PLPGSQL_DTYPE_PROMISE)
 	{
 		if (param != expr->expr_rw_param &&
 			((PLpgSQL_var *) datum)->datatype->typlen == -1)
-			scratch.d.cparam.paramfunc = plpgsql_param_eval_generic_ro;
+			paramfunc = plpgsql_param_eval_generic_ro;
 		else
-			scratch.d.cparam.paramfunc = plpgsql_param_eval_generic;
+			paramfunc = plpgsql_param_eval_generic;
 	}
 	else if (datum->dtype == PLPGSQL_DTYPE_REC &&
 			 param != expr->expr_rw_param)
-		scratch.d.cparam.paramfunc = plpgsql_param_eval_generic_ro;
+		paramfunc = plpgsql_param_eval_generic_ro;
 	else
-		scratch.d.cparam.paramfunc = plpgsql_param_eval_generic;
+		paramfunc = plpgsql_param_eval_generic;
 
-	/*
-	 * Note: it's tempting to use paramarg to store the estate pointer and
-	 * thereby save an indirection or two in the eval functions.  But that
-	 * doesn't work because the compiled expression might be used with
-	 * different estates for the same PL/pgSQL function.
-	 */
-	scratch.d.cparam.paramarg = NULL;
-	scratch.d.cparam.paramid = param->paramid;
-	scratch.d.cparam.paramtype = param->paramtype;
-	ExprEvalPushStep(state, &scratch);
+	return paramfunc;
 }
 
 /*
@@ -6507,12 +6508,12 @@ plpgsql_param_compile(ParamListInfo params, Param *param,
  * we do not need to invoke MakeExpandedObjectReadOnly.
  */
 static void
-plpgsql_param_eval_var(ExprState *state, ExprEvalStep *op,
-					   ExprContext *econtext)
+plpgsql_param_eval_var(void *callback_private, ExprContext *econtext,
+					   const Param *param, NullableDatum *result)
 {
 	ParamListInfo params;
 	PLpgSQL_execstate *estate;
-	int			dno = op->d.cparam.paramid - 1;
+	int			dno = param->paramid - 1;
 	PLpgSQL_var *var;
 
 	/* fetch back the hook data */
@@ -6524,12 +6525,12 @@ plpgsql_param_eval_var(ExprState *state, ExprEvalStep *op,
 	var = (PLpgSQL_var *) estate->datums[dno];
 	Assert(var->dtype == PLPGSQL_DTYPE_VAR);
 
-	/* inlined version of exec_eval_datum() */
-	*op->resvalue = var->value;
-	*op->resnull = var->isnull;
-
 	/* safety check -- an assertion should be sufficient */
-	Assert(var->datatype->typoid == op->d.cparam.paramtype);
+	Assert(var->datatype->typoid == param->paramtype);
+
+	/* inlined version of exec_eval_datum() */
+	result->isnull = var->isnull;
+	result->value = var->value;
 }
 
 /*
@@ -6539,12 +6540,12 @@ plpgsql_param_eval_var(ExprState *state, ExprEvalStep *op,
  * we need to invoke MakeExpandedObjectReadOnly.
  */
 static void
-plpgsql_param_eval_var_ro(ExprState *state, ExprEvalStep *op,
-						  ExprContext *econtext)
+plpgsql_param_eval_var_ro(void *callback_private, ExprContext *econtext,
+						  const Param *param, NullableDatum *result)
 {
 	ParamListInfo params;
 	PLpgSQL_execstate *estate;
-	int			dno = op->d.cparam.paramid - 1;
+	int			dno = param->paramid - 1;
 	PLpgSQL_var *var;
 
 	/* fetch back the hook data */
@@ -6556,17 +6557,15 @@ plpgsql_param_eval_var_ro(ExprState *state, ExprEvalStep *op,
 	var = (PLpgSQL_var *) estate->datums[dno];
 	Assert(var->dtype == PLPGSQL_DTYPE_VAR);
 
+	/* safety check -- an assertion should be sufficient */
+	Assert(var->datatype->typoid == param->paramtype);
+
 	/*
 	 * Inlined version of exec_eval_datum() ... and while we're at it, force
 	 * expanded datums to read-only.
 	 */
-	*op->resvalue = MakeExpandedObjectReadOnly(var->value,
-											   var->isnull,
-											   -1);
-	*op->resnull = var->isnull;
-
-	/* safety check -- an assertion should be sufficient */
-	Assert(var->datatype->typoid == op->d.cparam.paramtype);
+	result->isnull = var->isnull;
+	result->value = MakeExpandedObjectReadOnly(var->value, var->isnull, -1);
 }
 
 /*
@@ -6576,12 +6575,12 @@ plpgsql_param_eval_var_ro(ExprState *state, ExprEvalStep *op,
  * we never need to invoke MakeExpandedObjectReadOnly.
  */
 static void
-plpgsql_param_eval_recfield(ExprState *state, ExprEvalStep *op,
-							ExprContext *econtext)
+plpgsql_param_eval_recfield(void *callback_private, ExprContext *econtext,
+							const Param *param, NullableDatum *result)
 {
 	ParamListInfo params;
 	PLpgSQL_execstate *estate;
-	int			dno = op->d.cparam.paramid - 1;
+	int			dno = param->paramid - 1;
 	PLpgSQL_recfield *recfield;
 	PLpgSQL_rec *rec;
 	ExpandedRecordHeader *erh;
@@ -6626,19 +6625,17 @@ plpgsql_param_eval_recfield(ExprState *state, ExprEvalStep *op,
 		recfield->rectupledescid = erh->er_tupdesc_id;
 	}
 
-	/* OK to fetch the field value. */
-	*op->resvalue = expanded_record_get_field(erh,
-											  recfield->finfo.fnumber,
-											  op->resnull);
-
 	/* safety check -- needed for, eg, record fields */
-	if (unlikely(recfield->finfo.ftypeid != op->d.cparam.paramtype))
+	if (unlikely(recfield->finfo.ftypeid != param->paramtype))
 		ereport(ERROR,
 				(errcode(ERRCODE_DATATYPE_MISMATCH),
 				 errmsg("type of parameter %d (%s) does not match that when preparing the plan (%s)",
-						op->d.cparam.paramid,
+						param->paramid,
 						format_type_be(recfield->finfo.ftypeid),
-						format_type_be(op->d.cparam.paramtype))));
+						format_type_be(param->paramtype))));
+
+	/* OK to fetch the field value. */
+	result->value = expanded_record_get_field(erh, recfield->finfo.fnumber, &result->isnull);
 }
 
 /*
@@ -6648,12 +6645,12 @@ plpgsql_param_eval_recfield(ExprState *state, ExprEvalStep *op,
  * MakeExpandedObjectReadOnly.
  */
 static void
-plpgsql_param_eval_generic(ExprState *state, ExprEvalStep *op,
-						   ExprContext *econtext)
+plpgsql_param_eval_generic(void *callback_private, ExprContext *econtext,
+						   const Param *param, NullableDatum *result)
 {
 	ParamListInfo params;
 	PLpgSQL_execstate *estate;
-	int			dno = op->d.cparam.paramid - 1;
+	int			dno = param->paramid - 1;
 	PLpgSQL_datum *datum;
 	Oid			datumtype;
 	int32		datumtypmod;
@@ -6669,16 +6666,16 @@ plpgsql_param_eval_generic(ExprState *state, ExprEvalStep *op,
 	/* fetch datum's value */
 	exec_eval_datum(estate, datum,
 					&datumtype, &datumtypmod,
-					op->resvalue, op->resnull);
+					&result->value, &result->isnull);
 
 	/* safety check -- needed for, eg, record fields */
-	if (unlikely(datumtype != op->d.cparam.paramtype))
+	if (unlikely(datumtype != param->paramtype))
 		ereport(ERROR,
 				(errcode(ERRCODE_DATATYPE_MISMATCH),
 				 errmsg("type of parameter %d (%s) does not match that when preparing the plan (%s)",
-						op->d.cparam.paramid,
+						param->paramid,
 						format_type_be(datumtype),
-						format_type_be(op->d.cparam.paramtype))));
+						format_type_be(param->paramtype))));
 }
 
 /*
@@ -6688,12 +6685,12 @@ plpgsql_param_eval_generic(ExprState *state, ExprEvalStep *op,
  * MakeExpandedObjectReadOnly (hence, variable must be of a varlena type).
  */
 static void
-plpgsql_param_eval_generic_ro(ExprState *state, ExprEvalStep *op,
-							  ExprContext *econtext)
+plpgsql_param_eval_generic_ro(void *callback_private, ExprContext *econtext,
+							  const Param *param, NullableDatum *result)
 {
 	ParamListInfo params;
 	PLpgSQL_execstate *estate;
-	int			dno = op->d.cparam.paramid - 1;
+	int			dno = param->paramid - 1;
 	PLpgSQL_datum *datum;
 	Oid			datumtype;
 	int32		datumtypmod;
@@ -6709,21 +6706,20 @@ plpgsql_param_eval_generic_ro(ExprState *state, ExprEvalStep *op,
 	/* fetch datum's value */
 	exec_eval_datum(estate, datum,
 					&datumtype, &datumtypmod,
-					op->resvalue, op->resnull);
+					&result->value, &result->isnull);
 
 	/* safety check -- needed for, eg, record fields */
-	if (unlikely(datumtype != op->d.cparam.paramtype))
+	if (unlikely(datumtype != param->paramtype))
 		ereport(ERROR,
 				(errcode(ERRCODE_DATATYPE_MISMATCH),
 				 errmsg("type of parameter %d (%s) does not match that when preparing the plan (%s)",
-						op->d.cparam.paramid,
+						param->paramid,
 						format_type_be(datumtype),
-						format_type_be(op->d.cparam.paramtype))));
+						format_type_be(param->paramtype))));
 
 	/* force the value to read-only */
-	*op->resvalue = MakeExpandedObjectReadOnly(*op->resvalue,
-											   *op->resnull,
-											   -1);
+	result->value = MakeExpandedObjectReadOnly(result->value,
+											   result->isnull, -1);
 }
 
 
