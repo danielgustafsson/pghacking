@@ -17,6 +17,7 @@
 #include <llvm-c/BitReader.h>
 #include <llvm-c/BitWriter.h>
 #include <llvm-c/Core.h>
+#include <llvm-c/DebugInfo.h>
 #include <llvm-c/ExecutionEngine.h>
 #if LLVM_VERSION_MAJOR > 11
 #include <llvm-c/Orc.h>
@@ -243,6 +244,12 @@ llvm_mutable_module(LLVMJitContext *context)
 		context->module = LLVMModuleCreateWithName("pg");
 		LLVMSetTarget(context->module, llvm_triple);
 		LLVMSetDataLayout(context->module, llvm_layout);
+
+		LLVMAddModuleFlag(context->module, LLVMModuleFlagBehaviorWarning,
+						  "Debug Info Version",
+						  strlen("Debug Info Version"),
+						  LLVMValueAsMetadata(l_int32_const(LLVMDebugMetadataVersion())));
+
 	}
 
 	return context->module;

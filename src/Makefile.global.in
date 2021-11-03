@@ -1072,11 +1072,11 @@ endif # enable_coverage
 ifndef COMPILE.c.bc
 # -Wno-ignored-attributes added so gnu_printf doesn't trigger
 # warnings, when the main binary is compiled with C.
-COMPILE.c.bc = $(CLANG) -Wno-ignored-attributes $(BITCODE_CFLAGS) $(CPPFLAGS) -flto=thin -emit-llvm -c
+COMPILE.c.bc = $(CLANG) -Wno-ignored-attributes $(BITCODE_CFLAGS) $(CPPFLAGS) -flto=thin -emit-llvm -g2 -c
 endif
 
 ifndef COMPILE.cxx.bc
-COMPILE.cxx.bc = $(CLANG) -xc++ -Wno-ignored-attributes $(BITCODE_CXXFLAGS) $(CPPFLAGS) -flto=thin -emit-llvm -c
+COMPILE.cxx.bc = $(CLANG) -xc++ -Wno-ignored-attributes $(BITCODE_CXXFLAGS) $(CPPFLAGS) -flto=thin -g2 -emit-llvm -c
 endif
 
 %.bc : %.c

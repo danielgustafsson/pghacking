@@ -413,7 +413,8 @@ llvm_execute_inline_plan(llvm::Module *mod, ImportMapTy *globalsToInline)
 				 * Per-function info isn't necessarily stripped yet, as the
 				 * module is lazy-loaded when stripped above.
 				 */
-				llvm::stripDebugInfo(*F);
+				if (!jit_debugging_support)
+					llvm::stripDebugInfo(*F);
 
 				/*
 				 * If the to-be-imported function is one referenced including
@@ -430,7 +431,8 @@ llvm_execute_inline_plan(llvm::Module *mod, ImportMapTy *globalsToInline)
 					AF = create_redirection_function(importMod, F, SymbolName);
 
 					GlobalsToImport.insert(AF);
-					llvm::stripDebugInfo(*AF);
+					if (!jit_debugging_support)
+						llvm::stripDebugInfo(*AF);
 				}
 
 				if (valueToImport->hasExternalLinkage())
@@ -495,11 +497,12 @@ load_module(llvm::StringRef Identifier)
 		elog(FATAL, "failed to parse bitcode in file \"%s\"", path);
 
 	/*
-	 * Currently there's no use in more detailed debug info for JITed
-	 * code. Until that changes, not much point in wasting memory and cycles
-	 * on processing debuginfo.
+	 * Unless debugging is enabled, there is no use in more detailed debug
+	 * info for JITed code. So don't waste memory and cycles on processing
+	 * debuginfo.
 	 */
-	llvm::StripDebugInfo(*llvm::unwrap(mod));
+	if (!jit_debugging_support)
+		llvm::StripDebugInfo(*llvm::unwrap(mod));
 
 	return std::unique_ptr<llvm::Module>(llvm::unwrap(mod));
 }

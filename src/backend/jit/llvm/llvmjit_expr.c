@@ -17,6 +17,7 @@
 
 #include <llvm-c/Core.h>
 #include <llvm-c/Target.h>
+#include <llvm-c/DebugInfo.h>
 
 #include "access/htup_details.h"
 #include "access/nbtree.h"
@@ -59,6 +60,7 @@ typedef struct ExprCompileState
 	LLVMJitContext *context;
 
 	LLVMBuilderRef b;
+	LLVMDIBuilderRef b_d;
 
 	LLVMModuleRef mod;
 	LLVMValueRef fn;
@@ -91,6 +93,13 @@ typedef struct ExprCompileState
 			LLVMValueRef aggvalues;
 		}			agg;
 	}			d;
+
+	LLVMMetadataRef dbg_file;
+	LLVMMetadataRef dbg_mod;
+	LLVMMetadataRef dbg_cu;
+	LLVMMetadataRef dbg_fn;
+
+	LLVMMetadataRef dbg_scope;
 } ExprCompileState;
 
 
@@ -175,6 +184,33 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 
 	funcname = llvm_expand_funcname(ecs.context, "evalexpr");
 
+	{
+		ecs.b_d = LLVMCreateDIBuilder(ecs.mod);
+		ecs.dbg_file =
+			LLVMDIBuilderCreateFile(ecs.b_d, funcname,
+									strlen(funcname), ".", 1);
+		ecs.dbg_cu =
+			LLVMDIBuilderCreateCompileUnit(ecs.b_d,
+										   LLVMDWARFSourceLanguageC, ecs.dbg_file,
+										   /* Producer */ "pg", /* ProducerLen */ strlen("pg"),
+										   /* isOptimized */ true,
+										   /* Flags = */ NULL, /* FlagsLen */ 0,
+										   /* RuntimeVer = */ 0,
+										   /* SplitName = */ NULL, /* SplitNameLen */ 0,
+										   LLVMDWARFEmissionFull,
+										   /* DWOId */ 0,
+										   /* SplitDebugInlining */ false,
+										   /* DebugInfoForProfiling */ false,
+										   /* SysRoot = */ NULL, /* SysRootLen */ 0,
+										   /* SDK = */ NULL, /* SDKLen */ 0);
+		ecs.dbg_mod =
+			LLVMDIBuilderCreateModule(ecs.b_d, ecs.dbg_mod,
+									  "pg", 2,
+									  "", 0,
+									  NULL, 0,
+									  "", 0);
+	}
+
 	/* create function */
 	ecs.fn = LLVMAddFunction(ecs.mod, funcname,
 							 llvm_pg_var_func_type("TypeExprStateEvalFunc"));
@@ -198,11 +234,84 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 		LLVMAddAttributeAtIndex(ecs.fn, 3, attr);
 	}
 
-	ecs.b_entry = LLVMAppendBasicBlock(ecs.fn, "entry");
-	LLVMPositionBuilderAtEnd(b, ecs.b_entry);
+	{
+		LLVMMetadataRef Int64Ty =
+			LLVMDIBuilderCreateBasicType(ecs.b_d, "Int64", strlen("Int64"), 64, 0, LLVMDIFlagZero);
+		LLVMMetadataRef Int8Ty =
+			LLVMDIBuilderCreateBasicType(ecs.b_d, "Int8", strlen("Int8"), 64, 0, LLVMDIFlagZero);
+
+		LLVMMetadataRef ParamTypes[] = {Int64Ty, Int64Ty, Int64Ty, Int8Ty};
+
+		LLVMMetadataRef FunctionTy = LLVMDIBuilderCreateSubroutineType(ecs.b_d, ecs.dbg_file, ParamTypes, 4, 0);
+
+		ecs.dbg_fn = LLVMDIBuilderCreateFunction(ecs.b_d, ecs.dbg_file,
+												 funcname, strlen(funcname),
+												 funcname, strlen(funcname),
+												 ecs.dbg_file, 0, FunctionTy,
+												 false, true, 0, 0, true);
+
+		ecs.b_entry = LLVMAppendBasicBlock(ecs.fn, "entry");
+		LLVMPositionBuilderAtEnd(b, ecs.b_entry);
+
+		{
+			LLVMMetadataRef FooParamLocation =
+				LLVMDIBuilderCreateDebugLocation(LLVMGetGlobalContext(), 0, 0,
+												 ecs.dbg_fn, NULL);
+			LLVMMetadataRef FooParamExpression =
+				LLVMDIBuilderCreateExpression(ecs.b_d, NULL, 0);
+			LLVMMetadataRef FooParamVar1 =
+				LLVMDIBuilderCreateParameterVariable(ecs.b_d, ecs.dbg_fn, "state", strlen("state"), 1,
+													 ecs.dbg_file, 0, Int64Ty, true, 0);
+			LLVMMetadataRef FooParamVar2 =
+				LLVMDIBuilderCreateParameterVariable(ecs.b_d, ecs.dbg_fn, "econtext", strlen("econtext"), 2,
+													 ecs.dbg_file, 0, Int64Ty, true, 0);
+			LLVMMetadataRef FooParamVar3 =
+				LLVMDIBuilderCreateParameterVariable(ecs.b_d, ecs.dbg_fn, "isNull", strlen("isNull"), 3,
+													 ecs.dbg_file, 0, Int8Ty, true, 0);
+			LLVMDIBuilderInsertDeclareAtEnd(ecs.b_d, LLVMConstInt(LLVMInt64Type(), 0, false),
+											FooParamVar1, FooParamExpression,
+											FooParamLocation, ecs.b_entry);
+			LLVMDIBuilderInsertDeclareAtEnd(ecs.b_d, LLVMConstInt(LLVMInt64Type(), 0, false),
+											FooParamVar2, FooParamExpression,
+											FooParamLocation, ecs.b_entry);
+			LLVMDIBuilderInsertDeclareAtEnd(ecs.b_d, LLVMConstInt(LLVMInt8Type(), 0, false),
+											FooParamVar3, FooParamExpression,
+											FooParamLocation, ecs.b_entry);
+		}
+
+		LLVMSetSubprogram(ecs.fn, ecs.dbg_fn);
+	}
 
 	ecs.v_state = LLVMGetParam(ecs.fn, 0);
 	ecs.v_econtext = LLVMGetParam(ecs.fn, 1);
+
+	{
+		LLVMMetadataRef l2;
+#if 0
+		{
+			LLVMMetadataRef l = LLVMDIBuilderCreateDebugLocation(LLVMGetGlobalContext(), 0,
+																 0, ecs.dbg_fn, NULL);
+			LLVMSetCurrentDebugLocation2(b, l);
+		}
+#endif
+		ecs.dbg_scope =
+			LLVMDIBuilderCreateLexicalBlock(ecs.b_d, ecs.dbg_fn, ecs.dbg_file, 0, 0);
+
+		l2 = LLVMDIBuilderCreateDebugLocation(LLVMGetGlobalContext(), 0,
+															  0, ecs.dbg_file, NULL);
+		LLVMSetCurrentDebugLocation2(b, l2);
+	}
+
+	{
+		LLVMMetadataRef f = LLVMDIBuilderCreateFile(ecs.b_d, "setup", strlen("setup"),
+													"", sizeof("") - 1);
+		LLVMMetadataRef SetupBlock =
+			LLVMDIBuilderCreateLexicalBlock(ecs.b_d, ecs.dbg_scope, f, 1, 1);
+
+		LLVMMetadataRef l2 = LLVMDIBuilderCreateDebugLocation(LLVMGetGlobalContext(), 1,
+															  1, SetupBlock, NULL);
+		LLVMSetCurrentDebugLocation2(b, l2);
+	}
 
 	ecs.v_steps = l_load_struct_gep(b, ecs.v_state,
 									FIELDNO_EXPRSTATE_STEPS,
@@ -231,8 +340,21 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 		LLVMValueRef v_resultp;
 		LLVMValueRef v_resvaluep;
 		LLVMValueRef v_resnullp;
+		LLVMMetadataRef l;
 
-		LLVMPositionBuilderAtEnd(b, opblocks[opno]);
+		{
+			char *opname = psprintf("step %u: opcode:%d/%s", opno, opcode, opcode_name);
+
+			LLVMMetadataRef f = LLVMDIBuilderCreateFile(ecs.b_d, opname, strlen(opname),
+														"", sizeof("") - 1);
+			LLVMMetadataRef OpLexicalBlock =
+				LLVMDIBuilderCreateLexicalBlock(ecs.b_d, ecs.dbg_scope, f, opno + 5, 2);
+
+			l = LLVMDIBuilderCreateDebugLocation(LLVMGetGlobalContext(), opno + 7,
+																 opno + 7, OpLexicalBlock, NULL);
+			LLVMPositionBuilderAtEnd(b, opblocks[opno]);
+			LLVMSetCurrentDebugLocation2(b, l);
+		}
 
 		if (op->result == NULL)
 		{
@@ -2551,6 +2673,8 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 	LLVMPositionBuilderAtEnd(b, ecs.b_entry);
 	LLVMBuildBr(b, opblocks[0]);
 
+	LLVMDIBuilderFinalize(ecs.b_d);
+	LLVMDisposeDIBuilder(ecs.b_d);
 	LLVMDisposeBuilder(b);
 
 	/*
