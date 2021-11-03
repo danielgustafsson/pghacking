@@ -25,7 +25,10 @@ struct SubscriptingRefState;
 struct ScalarArrayOpExprHashTable;
 struct JsonConstructorExprState;
 
-/* Bits in ExprState->flags (see also execnodes.h for public flag bits): */
+/* Bits in ExprState->flags: */
+
+/* expression is for use with ExecQual() */
+#define EEO_FLAG_IS_QUAL					(1 << 0)
 /* expression's interpreter has been initialized */
 #define EEO_FLAG_INTERPRETER_INITIALIZED	(1 << 1)
 /* jump-threading is in use */
@@ -721,6 +724,81 @@ typedef struct ExprStateBuilder
 	Expr	   *expr;
 
 } ExprStateBuilder;
+
+
+typedef Datum (*ExprStateEvalFunc) (struct ExprState *expression,
+									struct ExprContext *econtext,
+									bool *isNull);
+
+typedef struct ExprState
+{
+	NodeTag		type;
+
+	uint8		flags;			/* bitmask of EEO_FLAG_* bits, see above */
+
+	/*
+	 * Storage for result value of a scalar expression, or for individual
+	 * column results within expressions built by ExecBuildProjectionInfo().
+	 */
+#define FIELDNO_EXPRSTATE_RESULT 2
+	NullableDatum result;
+
+	/*
+	 * If projecting a tuple result, this slot holds the result; else NULL.
+	 */
+#define FIELDNO_EXPRSTATE_RESULTSLOT 3
+	TupleTableSlot *resultslot;
+
+
+	/*
+	 * Function that actually evaluates the expression.  This can be set to
+	 * different values depending on the complexity of the expression.
+	 */
+	ExprStateEvalFunc evalfunc;
+
+	/* original expression tree, for debugging only */
+	Expr	   *expr;
+
+	/* private state for an evalfunc */
+	void	   *evalfunc_private;
+
+	int			steps_final_len;		/* number of steps */
+
+#define FIELDNO_EXPRSTATE_PARENT 8
+	struct PlanState *parent;	/* parent PlanState node, if any */
+
+	/*
+	 * Instructions to compute expression's return value.
+	 */
+#define FIELDNO_EXPRSTATE_STEPS 9
+	struct ExprEvalStep *steps;
+
+} ExprState;
+
+
+/* ----------------
+ *		ProjectionInfo node information
+ *
+ *		This is all the information needed to perform projections ---
+ *		that is, form new tuples by evaluation of targetlist expressions.
+ *		Nodes which need to do projections create one of these.
+ *
+ *		The target tuple slot is kept in ProjectionInfo->pi_state.resultslot.
+ *		ExecProject() evaluates the tlist, forms a tuple, and stores it
+ *		in the given slot.  Note that the result will be a "virtual" tuple
+ *		unless ExecMaterializeSlot() is then called to force it to be
+ *		converted to a physical tuple.  The slot must have a tupledesc
+ *		that matches the output of the tlist!
+ * ----------------
+ */
+typedef struct ProjectionInfo
+{
+	NodeTag		type;
+	/* instructions to evaluate projection */
+	ExprState	pi_state;
+	/* expression context in which to evaluate expression */
+	ExprContext *pi_exprContext;
+} ProjectionInfo;
 
 
 /* Non-inline data for container operations */

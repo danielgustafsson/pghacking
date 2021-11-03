@@ -19,6 +19,8 @@
 #include "nodes/lockoptions.h"
 #include "nodes/parsenodes.h"
 #include "utils/memutils.h"
+/* FIXME: would be nicer if this weren't included */
+#include "executor/execExpr.h"
 
 
 /*
