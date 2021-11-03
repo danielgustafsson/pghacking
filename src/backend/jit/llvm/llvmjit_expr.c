@@ -75,7 +75,7 @@ static LLVMValueRef create_LifetimeEnd(LLVMModuleRef mod);
  * JIT compile expression.
  */
 bool
-llvm_compile_expr(ExprState *state)
+llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 {
 	PlanState  *parent = state->parent;
 	char	   *funcname;
@@ -205,14 +205,14 @@ llvm_compile_expr(ExprState *state)
 									"v.econtext.aggvalues");
 
 	/* allocate blocks for each op upfront, so we can do jumps easily */
-	opblocks = palloc(sizeof(LLVMBasicBlockRef) * state->steps_len);
-	for (int opno = 0; opno < state->steps_len; opno++)
+	opblocks = palloc(sizeof(LLVMBasicBlockRef) * state->steps_final_len);
+	for (int opno = 0; opno < state->steps_final_len; opno++)
 		opblocks[opno] = l_bb_append_v(eval_fn, "b.op.%d.start", opno);
 
 	/* jump from entry to first block */
 	LLVMBuildBr(b, opblocks[0]);
 
-	for (int opno = 0; opno < state->steps_len; opno++)
+	for (int opno = 0; opno < state->steps_final_len; opno++)
 	{
 		ExprEvalStep *op;
 		ExprEvalOp	opcode;

@@ -93,11 +93,6 @@ typedef struct ExprState
 #define FIELDNO_EXPRSTATE_RESULTSLOT 3
 	TupleTableSlot *resultslot;
 
-	/*
-	 * Instructions to compute expression's return value.
-	 */
-#define FIELDNO_EXPRSTATE_STEPS 4
-	struct ExprEvalStep *steps;
 
 	/*
 	 * Function that actually evaluates the expression.  This can be set to
@@ -111,21 +106,17 @@ typedef struct ExprState
 	/* private state for an evalfunc */
 	void	   *evalfunc_private;
 
-	/*
-	 * XXX: following fields only needed during "compilation" (ExecInitExpr);
-	 * could be thrown away afterwards.
-	 */
+	int			steps_final_len;		/* number of steps */
 
-	int			steps_len;		/* number of steps currently */
-	int			steps_alloc;	/* allocated length of steps array */
-
-#define FIELDNO_EXPRSTATE_PARENT 10
+#define FIELDNO_EXPRSTATE_PARENT 8
 	struct PlanState *parent;	/* parent PlanState node, if any */
-	ParamListInfo ext_params;	/* for compiling PARAM_EXTERN nodes */
 
-	NullableDatum *innermost_caseval;
+	/*
+	 * Instructions to compute expression's return value.
+	 */
+#define FIELDNO_EXPRSTATE_STEPS 9
+	struct ExprEvalStep *steps;
 
-	NullableDatum *innermost_domainval;
 } ExprState;
 
 

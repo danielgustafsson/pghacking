@@ -150,7 +150,7 @@ jit_release_context(JitContext *context)
  * Returns true if successful, false if not.
  */
 bool
-jit_compile_expr(struct ExprState *state)
+jit_compile_expr(struct ExprState *state, struct ExprStateBuilder *esb)
 {
 	/*
 	 * We can easily create a one-off context for functions without an
@@ -174,7 +174,7 @@ jit_compile_expr(struct ExprState *state)
 
 	/* this also takes !jit_enabled into account */
 	if (provider_init())
-		return provider.compile_expr(state);
+		return provider.compile_expr(state, esb);
 
 	return false;
 }

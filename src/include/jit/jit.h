@@ -71,7 +71,8 @@ typedef void (*JitProviderInit) (JitProviderCallbacks *cb);
 typedef void (*JitProviderResetAfterErrorCB) (void);
 typedef void (*JitProviderReleaseContextCB) (JitContext *context);
 struct ExprState;
-typedef bool (*JitProviderCompileExprCB) (struct ExprState *state);
+struct ExprStateBuilder;
+typedef bool (*JitProviderCompileExprCB) (struct ExprState *state, struct ExprStateBuilder *esb);
 
 struct JitProviderCallbacks
 {
@@ -101,7 +102,7 @@ extern void jit_release_context(JitContext *context);
  * Functions for attempting to JIT code. Callers must accept that these might
  * not be able to perform JIT (i.e. return false).
  */
-extern bool jit_compile_expr(struct ExprState *state);
+extern bool jit_compile_expr(struct ExprState *state, struct ExprStateBuilder *esb);
 extern void InstrJitAgg(JitInstrumentation *dst, JitInstrumentation *add);
 
 

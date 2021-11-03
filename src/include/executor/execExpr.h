@@ -702,6 +702,27 @@ StaticAssertDecl(sizeof(ExprEvalStep) <= 64,
 				 "size of ExprEvalStep exceeds 64 bytes");
 
 
+typedef struct ExprStateBuilder
+{
+	uint8		flags;
+
+	int			steps_len;		/* number of steps currently */
+	int			steps_alloc;	/* allocated length of steps array */
+
+	struct PlanState *parent;	/* parent PlanState node, if any */
+	ParamListInfo ext_params;	/* for compiling PARAM_EXTERN nodes */
+
+	NullableDatum *innermost_caseval;
+	NullableDatum *innermost_domainval;
+
+	ExprEvalStep *steps;
+
+	/* original expression tree, for debugging only */
+	Expr	   *expr;
+
+} ExprStateBuilder;
+
+
 /* Non-inline data for container operations */
 typedef struct SubscriptingRefState
 {
@@ -756,7 +777,7 @@ typedef struct JsonConstructorExprState
 
 
 /* functions in execExprInterp.c */
-extern void ExecReadyInterpretedExpr(ExprState *state);
+extern void ExecReadyInterpretedExpr(ExprState *state, ExprStateBuilder *esb);
 extern ExprEvalOp ExecEvalStepOp(ExprState *state, ExprEvalStep *op);
 
 extern Datum ExecInterpExprStillValid(ExprState *state, ExprContext *econtext, bool *isNull);

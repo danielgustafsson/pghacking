@@ -109,7 +109,8 @@ extern void llvm_inline(LLVMModuleRef mod);
  * Code generation functions.
  ****************************************************************************
  */
-extern bool llvm_compile_expr(struct ExprState *state);
+struct ExprStateBuilder;
+extern bool llvm_compile_expr(struct ExprState *state, struct ExprStateBuilder *esb);
 struct TupleTableSlotOps;
 extern LLVMValueRef slot_compile_deform(struct LLVMJitContext *context, TupleDesc desc,
 										const struct TupleTableSlotOps *ops, int natts);
