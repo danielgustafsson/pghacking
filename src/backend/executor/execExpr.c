@@ -3508,12 +3508,24 @@ ExecBuildAggTrans(AggState *aggstate, AggStatePerPhase phase,
 	for (int transno = 0; transno < aggstate->numtrans; transno++)
 	{
 		AggStatePerTrans pertrans = &aggstate->pertrans[transno];
-		FunctionCallInfo trans_fcinfo = pertrans->transfn_fcinfo;
+		FunctionCallInfo trans_fcinfo;
 		List	   *adjust_bailout = NIL;
 		NullableDatum *strictargs = NULL;
 		bool	   *strictnulls = NULL;
 		int			argno;
 		ListCell   *bail;
+		size_t		numTransArgs;
+
+		/* account for the current transition state */
+		numTransArgs = pertrans->numTransInputs + 1;
+		trans_fcinfo = palloc0(SizeForFunctionCallInfo(numTransArgs));
+
+		InitFunctionCallInfoData(*trans_fcinfo,
+								 &pertrans->transfn,
+								 numTransArgs,
+								 pertrans->aggCollation,
+								 NULL, /* will get set when calling */
+								 NULL);
 
 		/*
 		 * If filter present, emit. Do so before evaluating the input, to
@@ -3569,7 +3581,19 @@ ExecBuildAggTrans(AggState *aggstate, AggStatePerPhase phase,
 			}
 			else
 			{
-				FunctionCallInfo ds_fcinfo = pertrans->deserialfn_fcinfo;
+				FunctionCallInfo ds_fcinfo;
+				AggStatePerCallContext *percall;
+
+				percall = makeNode(AggStatePerCallContext);
+				percall->aggstate = aggstate;
+				percall->pertrans = pertrans;
+
+				ds_fcinfo = palloc0(SizeForFunctionCallInfo(2));
+				InitFunctionCallInfoData(*ds_fcinfo,
+										 &pertrans->deserialfn,
+										 2,
+										 InvalidOid,
+										 (void *) percall, NULL);
 
 				/* evaluate argument */
 				ExecInitExprRec(source_tle->expr, state,
@@ -3817,13 +3841,17 @@ ExecBuildAggTransCall(ExprState *state, AggState *aggstate,
 					  int transno, int setno, int setoff, bool ishash,
 					  bool nullcheck)
 {
-	ExprContext *aggcontext;
 	int			adjust_jumpnull = -1;
+	AggStatePerCallContext *percall;
 
+	percall = makeNode(AggStatePerCallContext);
+	percall->aggstate = aggstate;
+	percall->pertrans = pertrans;
 	if (ishash)
-		aggcontext = aggstate->hashcontext;
+		percall->aggcontext = aggstate->hashcontext;
 	else
-		aggcontext = aggstate->aggcontexts[setno];
+		percall->aggcontext = aggstate->aggcontexts[setno];
+	percall->setno = setno;
 
 	/* add check for NULL pointer? */
 	if (nullcheck)
@@ -3892,18 +3920,25 @@ ExecBuildAggTransCall(ExprState *state, AggState *aggstate,
 			else
 				scratch->opcode = EEOP_AGG_PLAIN_TRANS_BYREF;
 		}
-	}
-	else if (pertrans->numInputs == 1)
-		scratch->opcode = EEOP_AGG_ORDERED_TRANS_DATUM;
-	else
-		scratch->opcode = EEOP_AGG_ORDERED_TRANS_TUPLE;
 
-	scratch->d.agg_trans.pertrans = pertrans;
-	scratch->d.agg_trans.fn_addr = fcinfo->flinfo->fn_addr;
-	scratch->d.agg_trans.setno = setno;
-	scratch->d.agg_trans.setoff = setoff;
-	scratch->d.agg_trans.transno = transno;
-	scratch->d.agg_trans.aggcontext = aggcontext;
+		scratch->d.agg_trans.percall = percall;
+		scratch->d.agg_trans.fcinfo_data = fcinfo;
+		scratch->d.agg_trans.fn_addr = fcinfo->flinfo->fn_addr;
+		scratch->d.agg_trans.setno = setno;
+		scratch->d.agg_trans.setoff = setoff;
+		scratch->d.agg_trans.transno = transno;
+	}
+	else
+	{
+		if (pertrans->numInputs == 1)
+			scratch->opcode = EEOP_AGG_ORDERED_TRANS_DATUM;
+		else
+			scratch->opcode = EEOP_AGG_ORDERED_TRANS_TUPLE;
+
+		scratch->d.agg_trans_ordered.pertrans = pertrans;
+		scratch->d.agg_trans_ordered.setno = setno;
+	}
+
 	ExprEvalPushStep(state, scratch);
 
 	/* fix up jumpnull */

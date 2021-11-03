@@ -54,8 +54,10 @@ ExecEvalParamCallback TypeExecEvalParamCallback;
 ExecEvalSubscriptCallback TypeExecEvalSubscriptCallback;
 ExecEvalSubscriptCheckCallback TypeExecEvalSubscriptCheckCallback;
 
+Node StructNode;
 NullableDatum StructNullableDatum;
 AggState	StructAggState;
+AggStatePerCallContext StructAggStatePerCallContext;
 AggStatePerGroupData StructAggStatePerGroupData;
 AggStatePerTransData StructAggStatePerTransData;
 ExprContext StructExprContext;

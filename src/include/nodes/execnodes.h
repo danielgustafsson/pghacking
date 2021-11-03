@@ -2374,6 +2374,7 @@ typedef struct AggStatePerTransData *AggStatePerTrans;
 typedef struct AggStatePerGroupData *AggStatePerGroup;
 typedef struct AggStatePerPhaseData *AggStatePerPhase;
 typedef struct AggStatePerHashData *AggStatePerHash;
+typedef struct AggStatePerCallContext AggStatePerCallContext;
 
 typedef struct AggState
 {
@@ -2388,19 +2389,14 @@ typedef struct AggState
 	int			current_phase;	/* current phase number */
 	AggStatePerAgg peragg;		/* per-Aggref information */
 	AggStatePerTrans pertrans;	/* per-Trans state information */
-	ExprContext *hashcontext;	/* econtexts for long-lived data (hashtable) */
+	ExprContext *hashcontext;	/* econtext for long-lived data (hashtable) */
 	ExprContext **aggcontexts;	/* econtexts for long-lived data (per GS) */
 	ExprContext *tmpcontext;	/* econtext for input expressions */
 #define FIELDNO_AGGSTATE_CURAGGCONTEXT 14
-	ExprContext *curaggcontext; /* currently active aggcontext */
-	AggStatePerAgg curperagg;	/* currently active aggregate, if any */
-#define FIELDNO_AGGSTATE_CURPERTRANS 16
-	AggStatePerTrans curpertrans;	/* currently active trans state, if any */
 	bool		input_done;		/* indicates end of input */
 	bool		agg_done;		/* indicates completion of Agg scan */
 	int			projected_set;	/* The last projected grouping set */
-#define FIELDNO_AGGSTATE_CURRENT_SET 20
-	int			current_set;	/* The current grouping set being evaluated */
+	int			returning_hash_set;	/* The current grouping set being returned */
 	Bitmapset  *grouped_cols;	/* grouped cols in current projection */
 	List	   *all_grouped_cols;	/* list of all grouped cols in DESC order */
 	Bitmapset  *colnos_needed;	/* all columns needed from the outer plan */
@@ -2445,10 +2441,9 @@ typedef struct AggState
 										 * per-group pointers */
 
 	/* support for evaluation of agg input expressions: */
-#define FIELDNO_AGGSTATE_ALL_PERGROUPS 53
+#define FIELDNO_AGGSTATE_ALL_PERGROUPS 50
 	AggStatePerGroup *all_pergroups;	/* array of first ->pergroups, than
 										 * ->hash_pergroup */
-	ProjectionInfo *combinedproj;	/* projection machinery */
 	SharedAggInfo *shared_info; /* one entry per worker */
 } AggState;
 

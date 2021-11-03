@@ -163,16 +163,10 @@ typedef struct AggStatePerTransData
 
 	/*
 	 * This field is a pre-initialized FunctionCallInfo struct used for
-	 * calling this aggregate's transfn.  We save a few cycles per row by not
-	 * re-initializing the unchanging fields; which isn't much, but it seems
-	 * worth the extra space consumption.
+	 * calling this aggregate's serialfn.  We save a few cycles per group by
+	 * not re-initializing the unchanging fields.
 	 */
-	FunctionCallInfo transfn_fcinfo;
-
-	/* Likewise for serialization and deserialization functions */
 	FunctionCallInfo serialfn_fcinfo;
-
-	FunctionCallInfo deserialfn_fcinfo;
 }			AggStatePerTransData;
 
 /*
@@ -321,6 +315,23 @@ typedef struct AggStatePerHashData
 	Agg		   *aggnode;		/* original Agg node, for numGroups etc. */
 }			AggStatePerHashData;
 
+/*
+ * AggStatePerCallContext - per agg related function invocation
+ *
+ * This provides state to functions like AggCheckCallContext(),
+ * AggGetAggref(), AggStateIsShared(), ...
+ */
+struct AggStatePerCallContext
+{
+	NodeTag		type;
+	AggState   *aggstate;
+	AggStatePerTrans pertrans;
+	ExprContext *aggcontext;
+	/* only set for final function invocations */
+	AggStatePerAgg peragg;
+	/* not set for deserialization invocations */
+	int			setno;
+};
 
 extern AggState *ExecInitAgg(Agg *node, EState *estate, int eflags);
 extern void ExecEndAgg(AggState *node);

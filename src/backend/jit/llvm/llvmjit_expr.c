@@ -2247,13 +2247,13 @@ llvm_compile_expr(ExprState *state)
 			case EEOP_AGG_PLAIN_TRANS_STRICT_BYREF:
 			case EEOP_AGG_PLAIN_TRANS_BYREF:
 				{
-					AggState   *aggstate;
-					AggStatePerTrans pertrans;
+					AggState *aggstate;
 					FunctionCallInfo fcinfo;
 
 					LLVMValueRef v_aggstatep;
 					LLVMValueRef v_fcinfo;
 					LLVMValueRef v_fcinfo_isnull;
+					LLVMValueRef v_fcinfo_context;
 
 					LLVMValueRef v_transvaluep;
 					LLVMValueRef v_transnullp;
@@ -2261,14 +2261,9 @@ llvm_compile_expr(ExprState *state)
 					LLVMValueRef v_setoff;
 					LLVMValueRef v_transno;
 
-					LLVMValueRef v_aggcontext;
+					LLVMValueRef v_percall;
 
 					LLVMValueRef v_allpergroupsp;
-					LLVMValueRef v_current_setp;
-					LLVMValueRef v_current_pertransp;
-					LLVMValueRef v_curaggcontext;
-
-					LLVMValueRef v_pertransp;
 
 					LLVMValueRef v_pergroupp;
 
@@ -2277,15 +2272,17 @@ llvm_compile_expr(ExprState *state)
 					LLVMValueRef v_tmpcontext;
 					LLVMValueRef v_oldcontext;
 
-					aggstate = castNode(AggState, state->parent);
-					pertrans = op->d.agg_trans.pertrans;
-
-					fcinfo = pertrans->transfn_fcinfo;
+					aggstate = castNode(AggState, parent);
+					fcinfo = op->d.agg_trans.fcinfo_data;
 
 					v_aggstatep =
 						LLVMBuildBitCast(b, v_parent, l_ptr(StructAggState), "");
-					v_pertransp = l_ptr_const(pertrans,
-											  l_ptr(StructAggStatePerTransData));
+
+					v_setoff = l_int32_const(op->d.agg_trans.setoff);
+					v_transno = l_int32_const(op->d.agg_trans.transno);
+					v_percall = l_ptr_const((void *) op->d.agg_trans.percall,
+											l_ptr(llvm_pg_var_type("StructAggStatePerCallContext")));
+					v_fcinfo = l_ptr_const(fcinfo, l_ptr(StructFunctionCallInfoData));
 
 					/*
 					 * pergroup = &aggstate->all_pergroups
@@ -2295,8 +2292,6 @@ llvm_compile_expr(ExprState *state)
 						l_load_struct_gep(b, v_aggstatep,
 										  FIELDNO_AGGSTATE_ALL_PERGROUPS,
 										  "aggstate.all_pergroups");
-					v_setoff = l_int32_const(op->d.agg_trans.setoff);
-					v_transno = l_int32_const(op->d.agg_trans.transno);
 					v_pergroupp =
 						LLVMBuildGEP(b,
 									 l_load_gep1(b, v_allpergroupsp, v_setoff, ""),
@@ -2328,17 +2323,13 @@ llvm_compile_expr(ExprState *state)
 
 						/* block to init the transition value if necessary */
 						{
-							LLVMValueRef params[4];
+							LLVMValueRef params[3];
 
 							LLVMPositionBuilderAtEnd(b, b_init);
 
-							v_aggcontext = l_ptr_const(op->d.agg_trans.aggcontext,
-													   l_ptr(StructExprContext));
-
-							params[0] = v_aggstatep;
-							params[1] = v_pertransp;
-							params[2] = v_pergroupp;
-							params[3] = v_aggcontext;
+							params[0] = v_percall;
+							params[1] = v_pergroupp;
+							params[2] = v_fcinfo;
 
 							LLVMBuildCall(b,
 										  llvm_pg_func(mod, "ExecAggInitGroup"),
@@ -2375,39 +2366,21 @@ llvm_compile_expr(ExprState *state)
 						LLVMPositionBuilderAtEnd(b, b_strictpass);
 					}
 
-
-					v_fcinfo = l_ptr_const(fcinfo,
-										   l_ptr(StructFunctionCallInfoData));
-					v_aggcontext = l_ptr_const(op->d.agg_trans.aggcontext,
-											   l_ptr(StructExprContext));
-
-					v_current_setp =
-						LLVMBuildStructGEP(b,
-										   v_aggstatep,
-										   FIELDNO_AGGSTATE_CURRENT_SET,
-										   "aggstate.current_set");
-					v_curaggcontext =
-						LLVMBuildStructGEP(b,
-										   v_aggstatep,
-										   FIELDNO_AGGSTATE_CURAGGCONTEXT,
-										   "aggstate.curaggcontext");
-					v_current_pertransp =
-						LLVMBuildStructGEP(b,
-										   v_aggstatep,
-										   FIELDNO_AGGSTATE_CURPERTRANS,
-										   "aggstate.curpertrans");
-
-					/* set aggstate globals */
-					LLVMBuildStore(b, v_aggcontext, v_curaggcontext);
-					LLVMBuildStore(b, l_int32_const(op->d.agg_trans.setno),
-								   v_current_setp);
-					LLVMBuildStore(b, v_pertransp, v_current_pertransp);
-
 					/* invoke transition function in per-tuple context */
 					v_tmpcontext =
 						l_ptr_const(aggstate->tmpcontext->ecxt_per_tuple_memory,
 									l_ptr(StructMemoryContextData));
 					v_oldcontext = l_mcxt_switch(mod, b, v_tmpcontext);
+
+					/* set the per-call context */
+					v_fcinfo_context =
+						LLVMBuildStructGEP(b, v_fcinfo,
+										   FIELDNO_FUNCTIONCALLINFODATA_CONTEXT,
+										   "fcinfo.context");
+					LLVMBuildStore(b,
+								   LLVMBuildBitCast(b, v_percall,
+													l_ptr(llvm_pg_var_type("StructNode")), ""),
+								   v_fcinfo_context);
 
 					/* store transvalue in fcinfo->args[0] */
 					v_transvaluep =
@@ -2449,7 +2422,7 @@ llvm_compile_expr(ExprState *state)
 						LLVMValueRef v_transvalue;
 						LLVMValueRef v_transnull;
 						LLVMValueRef v_newval;
-						LLVMValueRef params[6];
+						LLVMValueRef params[5];
 
 						b_call = l_bb_before_v(opblocks[opno + 1],
 											   "op.%d.transcall", opno);
@@ -2472,13 +2445,12 @@ llvm_compile_expr(ExprState *state)
 						/* returned datum not passed datum, reparent */
 						LLVMPositionBuilderAtEnd(b, b_call);
 
-						params[0] = v_aggstatep;
-						params[1] = v_pertransp;
-						params[2] = v_retval;
-						params[3] = LLVMBuildTrunc(b, v_fcinfo_isnull,
+						params[0] = v_percall;
+						params[1] = v_retval;
+						params[2] = LLVMBuildTrunc(b, v_fcinfo_isnull,
 												   TypeParamBool, "");
-						params[4] = v_transvalue;
-						params[5] = LLVMBuildTrunc(b, v_transnull,
+						params[3] = v_transvalue;
+						params[4] = LLVMBuildTrunc(b, v_transnull,
 												   TypeParamBool, "");
 
 						v_fn = llvm_pg_func(mod, "ExecAggCopyTransValue");

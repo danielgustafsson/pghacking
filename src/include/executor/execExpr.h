@@ -683,22 +683,29 @@ typedef struct ExprEvalStep
 		}			agg_presorted_distinctcheck;
 
 		/* for EEOP_AGG_PLAIN_TRANS_[INIT_][STRICT_]{BYVAL,BYREF} */
-		/* for EEOP_AGG_ORDERED_TRANS_{DATUM,TUPLE} */
 		struct
 		{
-			AggStatePerTrans pertrans;
-			ExprContext *aggcontext;
+			FunctionCallInfo fcinfo_data;
+			const AggStatePerCallContext *percall;
 			PGFunction	fn_addr;
 			int			setno;
 			int			transno;
 			int			setoff;
 		}			agg_trans;
 
+
 		/* for EEOP_IS_JSON */
 		struct
 		{
 			JsonIsPredicate *pred;	/* original expression node */
 		}			is_json;
+
+		/* for EEOP_AGG_ORDERED_TRANS_{DATUM,TUPLE} */
+		struct
+		{
+			AggStatePerTrans pertrans;
+			int			setno;
+		}			agg_trans_ordered;
 
 	}			d;
 } ExprEvalStep;
@@ -738,7 +745,6 @@ typedef struct SubscriptingRefState
 	bool		prevnull;
 } SubscriptingRefState;
 
-<<<<<<< HEAD
 /* Execution step methods used for SubscriptingRef */
 typedef struct SubscriptExecSteps
 {
@@ -764,8 +770,6 @@ typedef struct JsonConstructorExprState
 	int			nargs;
 } JsonConstructorExprState;
 
-=======
->>>>>>> f57e1874a1 (WIP: expression eval: Decouple PARAM_CALLBACK interface more strongly from execExpr.c.)
 
 
 /* functions in execExprInterp.c */
@@ -826,9 +830,9 @@ extern void ExecEvalWholeRowVar(ExprState *state, ExprEvalStep *op,
 extern void ExecEvalSysVar(ExprState *state, ExprEvalStep *op,
 						   ExprContext *econtext, TupleTableSlot *slot);
 
-extern void ExecAggInitGroup(AggState *aggstate, AggStatePerTrans pertrans, AggStatePerGroup pergroup,
-							 ExprContext *aggcontext);
-extern Datum ExecAggCopyTransValue(AggState *aggstate, AggStatePerTrans pertrans,
+extern void ExecAggInitGroup(const AggStatePerCallContext *percall, AggStatePerGroup pergroup,
+							 FunctionCallInfi fcinfo);
+extern Datum ExecAggCopyTransValue(const AggStatePerCallContext *percall,
 								   Datum newValue, bool newValueIsNull,
 								   Datum oldValue, bool oldValueIsNull);
 extern bool ExecEvalPreOrderedDistinctSingle(AggState *aggstate,
