@@ -1702,11 +1702,43 @@ llvm_compile_expr(ExprState *state)
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
-			case EEOP_ARRAYCOERCE:
-				build_EvalXFunc(b, mod, "ExecEvalArrayCoerce",
-								v_state, v_opp, v_econtext);
+			case EEOP_ARRAYCOERCE_RELABEL:
+				build_EvalXFunc(b, mod, "ExecEvalArrayCoerceRelabel",
+								v_state, v_opp);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
+
+			case EEOP_ARRAYCOERCE_UNPACK:
+				{
+					LLVMValueRef v_ret;
+
+					v_ret = build_EvalXFunc(b, mod, "ExecEvalArrayCoerceUnpack",
+											v_state, v_opp);
+					v_ret = LLVMBuildZExt(b, v_ret, TypeStorageBool, "");
+
+					LLVMBuildCondBr(b,
+									LLVMBuildICmp(b, LLVMIntEQ, v_ret,
+												  l_sbool_const(1), ""),
+									opblocks[opno + 1],
+									opblocks[op->d.arraycoerce.jumpnext]);
+					break;
+				}
+
+			case EEOP_ARRAYCOERCE_PACK:
+				{
+					LLVMValueRef v_ret;
+
+					v_ret = build_EvalXFunc(b, mod, "ExecEvalArrayCoercePack",
+											v_state, v_opp);
+					v_ret = LLVMBuildZExt(b, v_ret, TypeStorageBool, "");
+
+					LLVMBuildCondBr(b,
+									LLVMBuildICmp(b, LLVMIntEQ, v_ret,
+												  l_sbool_const(1), ""),
+									opblocks[op->d.arraycoerce.jumpnext],
+									opblocks[opno + 1]);
+					break;
+				}
 
 			case EEOP_ROW:
 				build_EvalXFunc(b, mod, "ExecEvalRow",

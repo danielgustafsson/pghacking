@@ -64,10 +64,6 @@
 #include "fmgr.h"
 #include "utils/expandeddatum.h"
 
-/* avoid including execnodes.h here */
-struct ExprState;
-struct ExprContext;
-
 
 /*
  * Maximum number of array subscripts (arbitrary limit)
@@ -245,6 +241,11 @@ typedef struct ArrayMapState
 {
 	ArrayMetaState inp_extra;
 	ArrayMetaState ret_extra;
+	Datum	   *values;
+	bool	   *nulls;
+	int			nitems;
+	int			cur;
+	AnyArrayType  *inarr;
 } ArrayMapState;
 
 /* ArrayIteratorData is private in arrayfuncs.c */
@@ -376,9 +377,10 @@ extern ArrayType *array_set(ArrayType *array, int nSubscripts, int *indx,
 							Datum dataValue, bool isNull,
 							int arraytyplen, int elmlen, bool elmbyval, char elmalign);
 
-extern Datum array_map(Datum arrayd,
-					   struct ExprState *exprstate, struct ExprContext *econtext,
-					   Oid retType, ArrayMapState *amstate);
+extern bool array_map_unpack(Datum arrayd, ArrayMapState *amstate,
+							 Datum *res, bool *resnull);
+extern bool array_map_pack(Oid retType, ArrayMapState *amstate,
+						   Datum *res, bool *resnull);
 
 extern void array_bitmap_copy(bits8 *destbitmap, int destoffset,
 							  const bits8 *srcbitmap, int srcoffset,

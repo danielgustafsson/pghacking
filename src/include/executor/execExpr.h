@@ -173,7 +173,9 @@ typedef enum ExprEvalOp
 	EEOP_CURRENTOFEXPR,
 	EEOP_NEXTVALUEEXPR,
 	EEOP_ARRAYEXPR,
-	EEOP_ARRAYCOERCE,
+	EEOP_ARRAYCOERCE_RELABEL,
+	EEOP_ARRAYCOERCE_UNPACK,
+	EEOP_ARRAYCOERCE_PACK,
 	EEOP_ROW,
 
 	/*
@@ -448,12 +450,12 @@ typedef struct ExprEvalStep
 			bool		multidims;	/* is array expression multi-D? */
 		}			arrayexpr;
 
-		/* for EEOP_ARRAYCOERCE */
+		/* for EEOP_ARRAYCOERCE_(RELABEL|UNPACK|PACK) */
 		struct
 		{
-			ExprState  *elemexprstate;	/* null if no per-element work */
 			Oid			resultelemtype; /* element type of result array */
-			struct ArrayMapState *amstate;	/* workspace for array_map */
+			struct ArrayMapState *amstate;	/* workspace for array_map_* */
+			int			jumpnext;	/* next element */
 		}			arraycoerce;
 
 		/* for EEOP_ROW */
@@ -794,8 +796,9 @@ extern void ExecEvalRowNull(ExprState *state, ExprEvalStep *op,
 extern void ExecEvalRowNotNull(ExprState *state, ExprEvalStep *op,
 							   ExprContext *econtext);
 extern void ExecEvalArrayExpr(ExprState *state, ExprEvalStep *op);
-extern void ExecEvalArrayCoerce(ExprState *state, ExprEvalStep *op,
-								ExprContext *econtext);
+extern void ExecEvalArrayCoerceRelabel(ExprState *state, const ExprEvalStep *op);
+extern bool ExecEvalArrayCoerceUnpack(ExprState *state, const ExprEvalStep *op);
+extern bool ExecEvalArrayCoercePack(ExprState *state, const ExprEvalStep *op);
 extern void ExecEvalRow(ExprState *state, ExprEvalStep *op);
 extern void ExecEvalMinMax(ExprState *state, ExprEvalStep *op);
 extern void ExecEvalFieldSelect(ExprState *state, ExprEvalStep *op,

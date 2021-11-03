@@ -1615,7 +1615,6 @@ ExecInitExprRec(Expr *node, ExprState *state,
 			{
 				ArrayCoerceExpr *acoerce = (ArrayCoerceExpr *) node;
 				Oid			resultelemtype;
-				ExprState  *elemstate;
 
 				/* evaluate argument into step's result area */
 				ExecInitExprRec(acoerce->arg, state, resv, resnull);
@@ -1626,55 +1625,58 @@ ExecInitExprRec(Expr *node, ExprState *state,
 							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 							 errmsg("target type is not an array")));
 
-				/*
-				 * Construct a sub-expression for the per-element expression;
-				 * but don't ready it until after we check it for triviality.
-				 * We assume it hasn't any Var references, but does have a
-				 * CaseTestExpr representing the source array element values.
-				 */
-				elemstate = makeNode(ExprState);
-				elemstate->expr = acoerce->elemexpr;
-				elemstate->parent = state->parent;
-				elemstate->ext_params = state->ext_params;
-
-				elemstate->innermost_caseval = (Datum *) palloc(sizeof(Datum));
-				elemstate->innermost_casenull = (bool *) palloc(sizeof(bool));
-
-				ExecInitExprRec(acoerce->elemexpr, elemstate,
-								&elemstate->resvalue, &elemstate->resnull);
-
-				if (elemstate->steps_len == 1 &&
-					elemstate->steps[0].opcode == EEOP_CASE_TESTVAL)
+				if (IsA(acoerce->elemexpr, CaseTestExpr))
 				{
-					/* Trivial, so we need no per-element work at runtime */
-					elemstate = NULL;
-				}
-				else
-				{
-					/* Not trivial, so append a DONE step */
-					scratch.opcode = EEOP_DONE_RETURN;
-					ExprEvalPushStep(elemstate, &scratch);
-					/* and ready the subexpression */
-					ExecReadyExpr(elemstate);
-				}
-
-				scratch.opcode = EEOP_ARRAYCOERCE;
-				scratch.d.arraycoerce.elemexprstate = elemstate;
-				scratch.d.arraycoerce.resultelemtype = resultelemtype;
-
-				if (elemstate)
-				{
-					/* Set up workspace for array_map */
-					scratch.d.arraycoerce.amstate =
-						(ArrayMapState *) palloc0(sizeof(ArrayMapState));
-				}
-				else
-				{
-					/* Don't need workspace if there's no subexpression */
+					/*
+					 * If the transform expression is just the element itself,
+					 * the elements are binary compatible, and just the header
+					 * needs to be adjusted. In that case there's no need for
+					 * per-element transformations.
+					 */
+					scratch.opcode = EEOP_ARRAYCOERCE_RELABEL;
 					scratch.d.arraycoerce.amstate = NULL;
+					scratch.d.arraycoerce.resultelemtype = resultelemtype;
+					scratch.d.arraycoerce.jumpnext = -1;
+					ExprEvalPushStep(state, &scratch);
 				}
+				else
+				{
+					int			startstep;
+					Datum	   *save_innermost_caseval;
+					bool	   *save_innermost_casenull;
+					ArrayMapState *amstate;
 
-				ExprEvalPushStep(state, &scratch);
+					/* Set up workspace for array_map */
+					amstate = (ArrayMapState *) palloc0(sizeof(ArrayMapState));
+
+					/* build a step to unpack the array, stages element in result */
+					scratch.opcode = EEOP_ARRAYCOERCE_UNPACK;
+					scratch.d.arraycoerce.amstate = amstate;
+					scratch.d.arraycoerce.resultelemtype = resultelemtype;
+					scratch.d.arraycoerce.jumpnext = -1;
+					ExprEvalPushStep(state, &scratch);
+					startstep = state->steps_len - 1;
+
+					/* evaluate the per-element expression, from result into result */
+					// XXX: separate allocation instead, for robustness?
+					save_innermost_caseval = state->innermost_caseval;
+					save_innermost_casenull = state->innermost_casenull;
+					state->innermost_caseval = resv;
+					state->innermost_casenull = resnull;
+					ExecInitExprRec(acoerce->elemexpr, state, resv, resnull);
+					state->innermost_caseval = save_innermost_caseval;
+					state->innermost_casenull = save_innermost_casenull;
+
+					/* jump backwards after staging element in result, or form final array */
+					scratch.opcode = EEOP_ARRAYCOERCE_PACK;
+					scratch.d.arraycoerce.amstate = amstate;
+					scratch.d.arraycoerce.resultelemtype = resultelemtype;
+					scratch.d.arraycoerce.jumpnext = startstep + 1;
+					ExprEvalPushStep(state, &scratch);
+
+					Assert(state->steps[startstep].opcode == EEOP_ARRAYCOERCE_UNPACK);
+					state->steps[startstep].d.arraycoerce.jumpnext = state->steps_len;
+				}
 				break;
 			}
 

@@ -160,7 +160,6 @@ static Datum ExecJustScanVar(ExprState *state, ExprContext *econtext, bool *isnu
 static Datum ExecJustAssignInnerVar(ExprState *state, ExprContext *econtext, bool *isnull);
 static Datum ExecJustAssignOuterVar(ExprState *state, ExprContext *econtext, bool *isnull);
 static Datum ExecJustAssignScanVar(ExprState *state, ExprContext *econtext, bool *isnull);
-static Datum ExecJustApplyFuncToCase(ExprState *state, ExprContext *econtext, bool *isnull);
 static Datum ExecJustConst(ExprState *state, ExprContext *econtext, bool *isnull);
 static Datum ExecJustInnerVarVirt(ExprState *state, ExprContext *econtext, bool *isnull);
 static Datum ExecJustOuterVarVirt(ExprState *state, ExprContext *econtext, bool *isnull);
@@ -316,15 +315,6 @@ ExecReadyInterpretedExpr(ExprState *state)
 			state->evalfunc_private = (void *) ExecJustAssignScanVar;
 			return;
 		}
-		else if (step0 == EEOP_CASE_TESTVAL &&
-				 (step1 == EEOP_FUNCEXPR_STRICT ||
-				  step1 == EEOP_FUNCEXPR_STRICT_1 ||
-				  step1 == EEOP_FUNCEXPR_STRICT_2) &&
-				 state->steps[0].d.casetest.value)
-		{
-			state->evalfunc_private = (void *) ExecJustApplyFuncToCase;
-			return;
-		}
 	}
 	else if (state->steps_len == 2)
 	{
@@ -467,7 +457,9 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 		&&CASE_EEOP_CURRENTOFEXPR,
 		&&CASE_EEOP_NEXTVALUEEXPR,
 		&&CASE_EEOP_ARRAYEXPR,
-		&&CASE_EEOP_ARRAYCOERCE,
+		&&CASE_EEOP_ARRAYCOERCE_RELABEL,
+		&&CASE_EEOP_ARRAYCOERCE_UNPACK,
+		&&CASE_EEOP_ARRAYCOERCE_PACK,
 		&&CASE_EEOP_ROW,
 		&&CASE_EEOP_ROWCOMPARE_STEP,
 		&&CASE_EEOP_ROWCOMPARE_FINAL,
@@ -1418,12 +1410,28 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 			EEO_NEXT();
 		}
 
-		EEO_CASE(EEOP_ARRAYCOERCE)
+		EEO_CASE(EEOP_ARRAYCOERCE_RELABEL)
 		{
 			/* too complex for an inline implementation */
-			ExecEvalArrayCoerce(state, op, econtext);
-
+			ExecEvalArrayCoerceRelabel(state, op);
 			EEO_NEXT();
+		}
+
+		EEO_CASE(EEOP_ARRAYCOERCE_UNPACK)
+		{
+			/* too complex for an inline implementation */
+			if (ExecEvalArrayCoerceUnpack(state, op))
+				EEO_NEXT(); /* already done */
+			EEO_JUMP(op->d.arraycoerce.jumpnext);
+		}
+
+		EEO_CASE(EEOP_ARRAYCOERCE_PACK)
+		{
+			/* too complex for an inline implementation */
+			if (ExecEvalArrayCoercePack(state, op))
+				EEO_JUMP(op->d.arraycoerce.jumpnext); /* transform next element */
+			else
+				EEO_NEXT(); /* finished */
 		}
 
 		EEO_CASE(EEOP_ROW)
@@ -2284,44 +2292,6 @@ ExecJustAssignScanVar(ExprState *state, ExprContext *econtext, bool *isnull)
 	return ExecJustAssignVarImpl(state, econtext->ecxt_scantuple, isnull);
 }
 
-/* Evaluate CASE_TESTVAL and apply a strict function to it */
-static Datum
-ExecJustApplyFuncToCase(ExprState *state, ExprContext *econtext, bool *isnull)
-{
-	ExprEvalStep *op = &state->steps[0];
-	FunctionCallInfo fcinfo;
-	NullableDatum *args;
-	int			nargs;
-	Datum		d;
-
-	/*
-	 * XXX with some redesign of the CaseTestExpr mechanism, maybe we could
-	 * get rid of this data shuffling?
-	 */
-	*op->resvalue = *op->d.casetest.value;
-	*op->resnull = *op->d.casetest.isnull;
-
-	op++;
-
-	nargs = op->d.func.nargs;
-	fcinfo = op->d.func.fcinfo_data;
-	args = fcinfo->args;
-
-	/* strict function, so check for NULL args */
-	for (int argno = 0; argno < nargs; argno++)
-	{
-		if (args[argno].isnull)
-		{
-			*isnull = true;
-			return (Datum) 0;
-		}
-	}
-	fcinfo->isnull = false;
-	d = op->d.func.fn_addr(fcinfo);
-	*isnull = fcinfo->isnull;
-	return d;
-}
-
 /* Simple Const expression */
 static Datum
 ExecJustConst(ExprState *state, ExprContext *econtext, bool *isnull)
@@ -3039,44 +3009,52 @@ ExecEvalArrayExpr(ExprState *state, ExprEvalStep *op)
 	*op->resvalue = PointerGetDatum(result);
 }
 
-/*
- * Evaluate an ArrayCoerceExpr expression.
- *
- * Source array is in step's result variable.
- */
 void
-ExecEvalArrayCoerce(ExprState *state, ExprEvalStep *op, ExprContext *econtext)
+ExecEvalArrayCoerceRelabel(ExprState *state, const ExprEvalStep *op)
 {
-	Datum		arraydatum;
-
 	/* NULL array -> NULL result */
 	if (*op->resnull)
 		return;
-
-	arraydatum = *op->resvalue;
-
-	/*
-	 * If it's binary-compatible, modify the element type in the array header,
-	 * but otherwise leave the array as we received it.
-	 */
-	if (op->d.arraycoerce.elemexprstate == NULL)
+	else
 	{
 		/* Detoast input array if necessary, and copy in any case */
+		Datum		arraydatum = *op->resvalue;
 		ArrayType  *array = DatumGetArrayTypePCopy(arraydatum);
 
 		ARR_ELEMTYPE(array) = op->d.arraycoerce.resultelemtype;
 		*op->resvalue = PointerGetDatum(array);
 		return;
 	}
+}
 
-	/*
-	 * Use array_map to apply the sub-expression to each array element.
-	 */
-	*op->resvalue = array_map(arraydatum,
-							  op->d.arraycoerce.elemexprstate,
-							  econtext,
-							  op->d.arraycoerce.resultelemtype,
-							  op->d.arraycoerce.amstate);
+/*
+ * Evaluate an ArrayCoerceExpr expression.
+ *
+ * Source array is in step's result variable.
+ */
+bool
+ExecEvalArrayCoerceUnpack(ExprState *state, const ExprEvalStep *op)
+{
+	/* NULL array -> NULL result */
+	if (*op->resnull)
+		return false;
+
+	return array_map_unpack(*op->resvalue, op->d.arraycoerce.amstate,
+							op->resvalue, op->resnull);
+}
+
+
+/*
+ * Evaluate an ArrayCoerceExpr expression.
+ *
+ * Source array is in step's result variable.
+ */
+bool
+ExecEvalArrayCoercePack(ExprState *state, const ExprEvalStep *op)
+{
+	return array_map_pack(op->d.arraycoerce.resultelemtype,
+						  op->d.arraycoerce.amstate,
+						  op->resvalue, op->resnull);
 }
 
 /*

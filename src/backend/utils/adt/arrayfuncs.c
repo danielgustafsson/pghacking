@@ -3131,7 +3131,7 @@ array_set(ArrayType *array, int nSubscripts, int *indx,
 }
 
 /*
- * array_map()
+ * array_map_unpack()
  *
  * Map an array through an arbitrary expression.  Return a new array with
  * the same dimensions and each source element transformed by the given,
@@ -3140,7 +3140,6 @@ array_set(ArrayType *array, int nSubscripts, int *indx,
  *
  * Parameters are:
  * * arrayd: Datum representing array argument.
- * * exprstate: ExprState representing the per-element transformation.
  * * econtext: context for expression evaluation.
  * * retType: OID of element type of output array.  This must be the same as,
  *	 or binary-compatible with, the result type of the expression.  It might
@@ -3155,46 +3154,30 @@ array_set(ArrayType *array, int nSubscripts, int *indx,
  * NB: caller must assure that input array is not NULL.  NULL elements in
  * the array are OK however.
  * NB: caller should be running in econtext's per-tuple memory context.
+ *
+ * FIXME: update comments
  */
-Datum
-array_map(Datum arrayd,
-		  ExprState *exprstate, ExprContext *econtext,
-		  Oid retType, ArrayMapState *amstate)
+bool
+array_map_unpack(Datum arrayd, ArrayMapState *amstate, Datum *result, bool *isnull)
 {
 	AnyArrayType *v = DatumGetAnyArrayP(arrayd);
-	ArrayType  *result;
-	Datum	   *values;
-	bool	   *nulls;
-	int		   *dim;
-	int			ndim;
-	int			nitems;
 	int			i;
-	int32		nbytes = 0;
-	int32		dataoffset;
-	bool		hasnulls;
 	Oid			inpType;
 	int			inp_typlen;
 	bool		inp_typbyval;
 	char		inp_typalign;
-	int			typlen;
-	bool		typbyval;
-	char		typalign;
-	array_iter	iter;
 	ArrayMetaState *inp_extra;
-	ArrayMetaState *ret_extra;
-	Datum	   *transform_source = exprstate->innermost_caseval;
-	bool	   *transform_source_isnull = exprstate->innermost_casenull;
+	array_iter	iter;
 
 	inpType = AARR_ELEMTYPE(v);
-	ndim = AARR_NDIM(v);
-	dim = AARR_DIMS(v);
-	nitems = ArrayGetNItems(ndim, dim);
+	amstate->inarr = v;
+	amstate->nitems = ArrayGetNItems(AARR_NDIM(v), AARR_DIMS(v));
 
 	/* Check for empty array */
-	if (nitems <= 0)
+	if (amstate->nitems <= 0)
 	{
 		/* Return empty array */
-		return PointerGetDatum(construct_empty_array(retType));
+		return false;
 	}
 
 	/*
@@ -3203,7 +3186,6 @@ array_map(Datum arrayd,
 	 * underneath us.
 	 */
 	inp_extra = &amstate->inp_extra;
-	ret_extra = &amstate->ret_extra;
 
 	if (inp_extra->element_type != inpType)
 	{
@@ -3217,6 +3199,66 @@ array_map(Datum arrayd,
 	inp_typbyval = inp_extra->typbyval;
 	inp_typalign = inp_extra->typalign;
 
+	/* Allocate temporary arrays for new values */
+	amstate->values = (Datum *) palloc(amstate->nitems * sizeof(Datum));
+	amstate->nulls = (bool *) palloc(amstate->nitems * sizeof(bool));
+
+	/* Loop over source data */
+	array_iter_setup(&iter, v);
+	for (i = 0; i < amstate->nitems; i++)
+	{
+		amstate->values[i] =
+			array_iter_next(&iter, &amstate->nulls[i], i,
+							inp_typlen, inp_typbyval, inp_typalign);
+	}
+
+	/* set up state for per-element conversion of first element */
+	amstate->cur = 0;
+	*result = amstate->values[amstate->cur];
+	*isnull = amstate->nulls[amstate->cur];
+
+	return true;
+}
+
+bool
+array_map_pack(Oid retType, ArrayMapState *amstate,
+			   Datum *result, bool *isnull)
+{
+	ArrayMetaState *ret_extra = &amstate->ret_extra;
+	int			typlen;
+	bool		typbyval;
+	char		typalign;
+
+	bool		hasnulls;
+	ArrayType  *resultarr;
+	int32		nbytes = 0;
+	int32		dataoffset;
+	int			ndim;
+
+	/* FIXME: this probably should be handled elsewhere */
+	if (amstate->nitems <= 0)
+	{
+		*result = PointerGetDatum(construct_empty_array(retType));
+		*isnull = true;
+
+		return false;
+	}
+
+	amstate->values[amstate->cur] = *result;
+	amstate->nulls[amstate->cur] = *isnull;
+
+	/* transform next element */
+	if (amstate->cur + 1 < amstate->nitems)
+	{
+		amstate->cur++;
+
+		*result = amstate->values[amstate->cur];
+		*isnull = amstate->nulls[amstate->cur];
+
+		return true;
+	}
+
+	/* see array_map_unpack */
 	if (ret_extra->element_type != retType)
 	{
 		get_typlenbyvalalign(retType,
@@ -3225,37 +3267,23 @@ array_map(Datum arrayd,
 							 &ret_extra->typalign);
 		ret_extra->element_type = retType;
 	}
+
 	typlen = ret_extra->typlen;
 	typbyval = ret_extra->typbyval;
 	typalign = ret_extra->typalign;
 
-	/* Allocate temporary arrays for new values */
-	values = (Datum *) palloc(nitems * sizeof(Datum));
-	nulls = (bool *) palloc(nitems * sizeof(bool));
-
-	/* Loop over source data */
-	array_iter_setup(&iter, v);
 	hasnulls = false;
-
-	for (i = 0; i < nitems; i++)
+	for (int i = 0; i < amstate->nitems; i++)
 	{
-		/* Get source element, checking for NULL */
-		*transform_source =
-			array_iter_next(&iter, transform_source_isnull, i,
-							inp_typlen, inp_typbyval, inp_typalign);
-
-		/* Apply the given expression to source element */
-		values[i] = ExecEvalExpr(exprstate, econtext, &nulls[i]);
-
-		if (nulls[i])
+		if (amstate->nulls[i])
 			hasnulls = true;
 		else
 		{
 			/* Ensure data is not toasted */
 			if (typlen == -1)
-				values[i] = PointerGetDatum(PG_DETOAST_DATUM(values[i]));
+				amstate->values[i] = PointerGetDatum(PG_DETOAST_DATUM(amstate->values[i]));
 			/* Update total result size */
-			nbytes = att_addlength_datum(nbytes, typlen, values[i]);
+			nbytes = att_addlength_datum(nbytes, typlen, amstate->values[i]);
 			nbytes = att_align_nominal(nbytes, typalign);
 			/* check for overflow of total request */
 			if (!AllocSizeIsValid(nbytes))
@@ -3266,10 +3294,12 @@ array_map(Datum arrayd,
 		}
 	}
 
+	ndim = AARR_NDIM(amstate->inarr);
+
 	/* Allocate and fill the result array */
 	if (hasnulls)
 	{
-		dataoffset = ARR_OVERHEAD_WITHNULLS(ndim, nitems);
+		dataoffset = ARR_OVERHEAD_WITHNULLS(ndim, amstate->nitems);
 		nbytes += dataoffset;
 	}
 	else
@@ -3277,26 +3307,30 @@ array_map(Datum arrayd,
 		dataoffset = 0;			/* marker for no null bitmap */
 		nbytes += ARR_OVERHEAD_NONULLS(ndim);
 	}
-	result = (ArrayType *) palloc0(nbytes);
-	SET_VARSIZE(result, nbytes);
-	result->ndim = ndim;
-	result->dataoffset = dataoffset;
-	result->elemtype = retType;
-	memcpy(ARR_DIMS(result), AARR_DIMS(v), ndim * sizeof(int));
-	memcpy(ARR_LBOUND(result), AARR_LBOUND(v), ndim * sizeof(int));
 
-	CopyArrayEls(result,
-				 values, nulls, nitems,
+	resultarr = (ArrayType *) palloc0(nbytes);
+	SET_VARSIZE(resultarr, nbytes);
+	resultarr->ndim = ndim;
+	resultarr->dataoffset = dataoffset;
+	resultarr->elemtype = retType;
+	memcpy(ARR_DIMS(resultarr), AARR_DIMS(amstate->inarr), ndim * sizeof(int));
+	memcpy(ARR_LBOUND(resultarr), AARR_LBOUND(amstate->inarr), ndim * sizeof(int));
+
+	CopyArrayEls(resultarr,
+				 amstate->values, amstate->nulls, amstate->nitems,
 				 typlen, typbyval, typalign,
 				 false);
 
 	/*
 	 * Note: do not risk trying to pfree the results of the called expression
 	 */
-	pfree(values);
-	pfree(nulls);
+	pfree(amstate->values);
+	pfree(amstate->nulls);
 
-	return PointerGetDatum(result);
+	*result = PointerGetDatum(resultarr);
+	*isnull = false;
+
+	return false;
 }
 
 /*
