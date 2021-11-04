@@ -224,7 +224,7 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 
 	LLVMSetLinkage(ecs.fn, LLVMExternalLinkage);
 	LLVMSetVisibility(ecs.fn, LLVMHiddenVisibility);
-	llvm_copy_attributes(AttributeTemplate, ecs.fn);
+	//llvm_copy_attributes(AttributeTemplate, ecs.fn);
 
 	{
 		int			id = LLVMGetEnumAttributeKindForName("noalias", sizeof("noalias") - 1);

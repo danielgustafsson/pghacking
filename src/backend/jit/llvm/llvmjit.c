@@ -94,6 +94,8 @@ LLVMModuleRef llvm_types_module = NULL;
 static bool llvm_session_initialized = false;
 static size_t llvm_generation = 0;
 static const char *llvm_triple = NULL;
+static const char *llvm_features = NULL;
+static const char *llvm_cpu = NULL;
 static const char *llvm_layout = NULL;
 
 
@@ -443,7 +445,7 @@ llvm_pg_func(LLVMModuleRef mod, const char *funcname)
 	v_fn = LLVMAddFunction(mod,
 						   funcname,
 						   LLVMGetElementType(LLVMTypeOf(v_srcfn)));
-	llvm_copy_attributes(v_srcfn, v_fn);
+	//llvm_copy_attributes(v_srcfn, v_fn);
 	LLVMSetVisibility(v_fn, LLVMHiddenVisibility);
 
 	return v_fn;
@@ -666,6 +668,31 @@ llvm_compile_module(LLVMJitContext *context)
 							  endtime, starttime);
 	}
 
+	/*
+	 * Update all functions to have attributes that are suitable for the
+	 * target we're running on. That's important for two reasons: First,
+	 * without matching target information, inlining will be
+	 * disabled. Secondly, we can take advantage of the current processor's
+	 * features, instead of having to use the smallest common denominator.
+	 *
+	 * XXX: Should we only do this when the attributes are nonexistant or the
+	 * same as the one from our template file?
+	 */
+	for (LLVMValueRef func = LLVMGetFirstFunction(context->module);
+		 func != NULL;
+		 func = LLVMGetNextFunction(func))
+	{
+		LLVMAttributeRef att;
+		att = LLVMCreateStringAttribute(LLVMGetGlobalContext(),
+										"target-features", strlen("target-features"),
+										llvm_features, strlen(llvm_features));
+		LLVMAddAttributeAtIndex(func, LLVMAttributeFunctionIndex, att);
+		att = LLVMCreateStringAttribute(LLVMGetGlobalContext(),
+										"target-cpu", strlen("target-cpu"),
+										llvm_cpu, strlen(llvm_cpu));
+		LLVMAddAttributeAtIndex(func, LLVMAttributeFunctionIndex, att);
+	}
+
 	if (jit_dump_bitcode)
 	{
 		char	   *filename;
@@ -794,8 +821,6 @@ llvm_session_initialize(void)
 {
 	MemoryContext oldcontext;
 	char	   *error = NULL;
-	char	   *cpu = NULL;
-	char	   *features = NULL;
 	LLVMTargetMachineRef opt0_tm;
 	LLVMTargetMachineRef opt3_tm;
 
@@ -835,26 +860,21 @@ llvm_session_initialize(void)
 	 * latter is needed because some CPU architectures default to enabling
 	 * features not all CPUs have (weird, huh).
 	 */
-	cpu = LLVMGetHostCPUName();
-	features = LLVMGetHostCPUFeatures();
-	elog(DEBUG2, "LLVMJIT detected CPU \"%s\", with features \"%s\"",
-		 cpu, features);
+	llvm_cpu = LLVMGetHostCPUName();
+	llvm_features = LLVMGetHostCPUFeatures();
+	elog(DEBUG2, "LLVMJIT detected CPU \"%s\" for triple: %s, with features \"%s\"",
+		 llvm_cpu, llvm_triple, llvm_features);
 
 	opt0_tm =
-		LLVMCreateTargetMachine(llvm_targetref, llvm_triple, cpu, features,
+		LLVMCreateTargetMachine(llvm_targetref, llvm_triple, llvm_cpu, llvm_features,
 								LLVMCodeGenLevelNone,
 								LLVMRelocDefault,
 								LLVMCodeModelJITDefault);
 	opt3_tm =
-		LLVMCreateTargetMachine(llvm_targetref, llvm_triple, cpu, features,
+		LLVMCreateTargetMachine(llvm_targetref, llvm_triple, llvm_cpu, llvm_features,
 								LLVMCodeGenLevelAggressive,
 								LLVMRelocDefault,
 								LLVMCodeModelJITDefault);
-
-	LLVMDisposeMessage(cpu);
-	cpu = NULL;
-	LLVMDisposeMessage(features);
-	features = NULL;
 
 	/* force symbols in main binary to be loaded */
 	LLVMLoadLibraryPermanently(NULL);

@@ -138,7 +138,7 @@ slot_compile_deform(LLVMJitContext *context, TupleDesc desc,
 	v_deform_fn = LLVMAddFunction(mod, funcname, deform_sig);
 	LLVMSetLinkage(v_deform_fn, LLVMInternalLinkage);
 	LLVMSetParamAlignment(LLVMGetParam(v_deform_fn, 0), MAXIMUM_ALIGNOF);
-	llvm_copy_attributes(AttributeTemplate, v_deform_fn);
+	//llvm_copy_attributes(AttributeTemplate, v_deform_fn);
 
 	b_entry =
 		LLVMAppendBasicBlock(v_deform_fn, "entry");
