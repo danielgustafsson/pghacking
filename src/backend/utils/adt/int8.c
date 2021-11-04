@@ -716,6 +716,17 @@ int8lcm(PG_FUNCTION_ARGS)
 	PG_RETURN_INT64(result);
 }
 
+extern pg_noinline void
+int8_overflow_error(void) pg_attribute_noreturn();
+
+pg_noinline void
+int8_overflow_error(void)
+{
+	ereport(ERROR,
+			(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+			 errmsg("bigint out of range")));
+}
+
 Datum
 int8inc(PG_FUNCTION_ARGS)
 {
@@ -746,9 +757,7 @@ int8inc(PG_FUNCTION_ARGS)
 		int64		result;
 
 		if (unlikely(pg_add_s64_overflow(arg, 1, &result)))
-			ereport(ERROR,
-					(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
-					 errmsg("bigint out of range")));
+			int8_overflow_error();
 
 		PG_RETURN_INT64(result);
 	}
