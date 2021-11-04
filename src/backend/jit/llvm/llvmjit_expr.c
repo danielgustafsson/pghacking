@@ -224,6 +224,7 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 
 	LLVMSetLinkage(ecs.fn, LLVMExternalLinkage);
 	LLVMSetVisibility(ecs.fn, LLVMHiddenVisibility);
+	LLVMSetUnnamedAddress(ecs.fn, LLVMGlobalUnnamedAddr);
 	//llvm_copy_attributes(AttributeTemplate, ecs.fn);
 
 	{

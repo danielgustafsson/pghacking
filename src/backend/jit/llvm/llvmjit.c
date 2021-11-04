@@ -595,6 +595,8 @@ llvm_optimize_module(LLVMJitContext *context, LLVMModuleRef module)
 	llvm_pmb = LLVMPassManagerBuilderCreate();
 	LLVMPassManagerBuilderUseLibraryInfo(llvm_pmb, LLVMGetTargetLibraryInfo(llvm_opt3_targetmachine));
 	LLVMPassManagerBuilderSetOptLevel(llvm_pmb, compile_optlevel);
+	LLVMPassManagerBuilderSetMergeFunctions(llvm_pmb, 1);
+
 	llvm_fpm = LLVMCreateFunctionPassManagerForModule(module);
 	LLVMAddAnalysisPasses(llvm_opt3_targetmachine, llvm_fpm);
 
@@ -861,6 +863,11 @@ llvm_session_initialize(void)
 		LLVMInitializeCodeGen(pass_registry);
 		LLVMInitializeTarget(pass_registry);
 	}
+
+	LLVMParseCommandLineOptions(2,
+								(const char*[]){"postgres",
+										"-mergefunc-use-aliases"},
+								NULL);
 
 	/*
 	 * When targeting an LLVM version with opaque pointers enabled by default,

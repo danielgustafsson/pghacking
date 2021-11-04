@@ -127,3 +127,13 @@ LLVMPassManagerBuilderUseLibraryInfo(LLVMPassManagerBuilderRef PMBR,
 									 LLVMTargetLibraryInfoRef TLI) {
 	unwrap(PMBR)->LibraryInfo = unwrap(TLI);
 }
+
+void
+LLVMPassManagerBuilderSetMergeFunctions(
+	struct LLVMOpaquePassManagerBuilder *PMBR,
+	bool value)
+{
+#if LLVM_VERSION_MAJOR >= 7
+	unwrap(PMBR)->MergeFunctions = true;;
+#endif
+}
