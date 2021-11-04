@@ -169,14 +169,14 @@ MemoizeHash_hash(struct memoize_hash *tb, const MemoizeKey *key)
 			/* combine successive hashkeys by rotating */
 			hashkey = pg_rotate_left32(hashkey, 1);
 
-			if (!pslot->tts_isnull[i])	/* treat nulls as having hash key 0 */
+			if (!pslot->tts_values[i].isnull)	/* treat nulls as having hash key 0 */
 			{
 				FormData_pg_attribute *attr;
 				uint32		hkey;
 
 				attr = &pslot->tts_tupleDescriptor->attrs[i];
 
-				hkey = datum_image_hash(pslot->tts_values[i], attr->attbyval, attr->attlen);
+				hkey = datum_image_hash(pslot->tts_values[i].value, attr->attbyval, attr->attlen);
 
 				hashkey ^= hkey;
 			}
@@ -192,12 +192,12 @@ MemoizeHash_hash(struct memoize_hash *tb, const MemoizeKey *key)
 			/* combine successive hashkeys by rotating */
 			hashkey = pg_rotate_left32(hashkey, 1);
 
-			if (!pslot->tts_isnull[i])	/* treat nulls as having hash key 0 */
+			if (!pslot->tts_values[i].isnull)	/* treat nulls as having hash key 0 */
 			{
 				uint32		hkey;
 
 				hkey = DatumGetUInt32(FunctionCall1Coll(&hashfunctions[i],
-														collations[i], pslot->tts_values[i]));
+														collations[i], pslot->tts_values[i].value));
 				hashkey ^= hkey;
 			}
 		}
@@ -296,9 +296,9 @@ prepare_probe_slot(MemoizeState *mstate, MemoizeKey *key)
 
 		/* Set the probeslot's values based on the current parameter values */
 		for (int i = 0; i < numKeys; i++)
-			pslot->tts_values[i] = ExecEvalExpr(mstate->param_exprs[i],
-												econtext,
-												&pslot->tts_isnull[i]);
+			pslot->tts_values[i].value = ExecEvalExpr(mstate->param_exprs[i],
+													  econtext,
+													  &pslot->tts_values[i].isnull);
 
 		MemoryContextSwitchTo(oldcontext);
 	}
@@ -307,8 +307,7 @@ prepare_probe_slot(MemoizeState *mstate, MemoizeKey *key)
 		/* Process the key's MinimalTuple and store the values in probeslot */
 		ExecStoreMinimalTuple(key->params, tslot, false);
 		slot_getallattrs(tslot);
-		memcpy(pslot->tts_values, tslot->tts_values, sizeof(Datum) * numKeys);
-		memcpy(pslot->tts_isnull, tslot->tts_isnull, sizeof(bool) * numKeys);
+		memcpy(pslot->tts_values, tslot->tts_values, sizeof(NullableDatum) * numKeys);
 	}
 
 	ExecStoreVirtualTuple(pslot);

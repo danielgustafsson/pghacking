@@ -90,7 +90,7 @@ typedef enum ExprEvalOp
 	EEOP_ASSIGN_OUTER_VAR,
 	EEOP_ASSIGN_SCAN_VAR,
 
-	/* assign ExprState's resvalue/resnull to a column of its resultslot */
+	/* assign ExprState's result to a column of its resultslot */
 	EEOP_ASSIGN_TMP,
 	/* ditto, applying MakeExpandedObjectReadOnly() */
 	EEOP_ASSIGN_TMP_MAKE_RO,
@@ -248,7 +248,7 @@ typedef enum ExprEvalOp
 	EEOP_AGG_DESERIALIZE,
 	EEOP_AGG_STRICT_INPUT_CHECK_ARGS,
 	EEOP_AGG_STRICT_INPUT_CHECK_ARGS_1,
-	EEOP_AGG_STRICT_INPUT_CHECK_NULLS,
+	//EEOP_AGG_STRICT_INPUT_CHECK_NULLS,
 	EEOP_AGG_PLAIN_PERGROUP_NULLCHECK,
 	EEOP_AGG_PLAIN_TRANS_INIT_STRICT_BYVAL,
 	EEOP_AGG_PLAIN_TRANS_STRICT_BYVAL,
@@ -276,8 +276,7 @@ typedef struct ExprEvalStep
 	intptr_t	opcode;
 
 	/* where to store the result of this step */
-	Datum	   *resvalue;
-	bool	   *resnull;
+	NullableDatum *result;
 
 	/*
 	 * Inline data for the operation.  Inline data is faster to access, but
@@ -285,7 +284,7 @@ typedef struct ExprEvalStep
 	 * no more than 40 bytes on 64-bit systems (so that the entire struct is
 	 * no more than 64 bytes, a single cacheline on common systems).
 	 */
-#define FIELDNO_EXPREVALSTEP_D 3
+#define FIELDNO_EXPREVALSTEP_D 2
 	union
 	{
 		/* for EEOP_INNER/OUTER/SCAN_FETCHSOME */
@@ -340,8 +339,7 @@ typedef struct ExprEvalStep
 		struct
 		{
 			/* constant's value */
-			Datum		value;
-			bool		isnull;
+			NullableDatum value;
 		}			constval;
 
 		/* for EEOP_FUNCEXPR_* / NULLIF / DISTINCT */
@@ -401,15 +399,13 @@ typedef struct ExprEvalStep
 		/* for EEOP_CASE_TESTVAL/DOMAIN_TESTVAL */
 		struct
 		{
-			Datum	   *value;	/* value to return */
-			bool	   *isnull;
+			NullableDatum *value;	/* value to return */
 		}			casetest;
 
 		/* for EEOP_MAKE_READONLY */
 		struct
 		{
-			Datum	   *value;	/* value to coerce to read-only */
-			bool	   *isnull;
+			NullableDatum *value;	/* value to coerce to read-only */
 		}			make_readonly;
 
 		/* for EEOP_IOCOERCE */
@@ -440,8 +436,7 @@ typedef struct ExprEvalStep
 		/* for EEOP_ARRAYEXPR */
 		struct
 		{
-			Datum	   *elemvalues; /* element values get stored here */
-			bool	   *elemnulls;
+			NullableDatum *elements; /* element values get stored here */
 			int			nelems; /* length of the above arrays */
 			Oid			elemtype;	/* array element type */
 			int16		elemlength; /* typlen of the array element type */
@@ -463,8 +458,7 @@ typedef struct ExprEvalStep
 		{
 			TupleDesc	tupdesc;	/* descriptor for result tuples */
 			/* workspace for the values constituting the row: */
-			Datum	   *elemvalues;
-			bool	   *elemnulls;
+			NullableDatum *elements;
 		}			row;
 
 		/* for EEOP_ROWCOMPARE_STEP */
@@ -490,8 +484,7 @@ typedef struct ExprEvalStep
 		struct
 		{
 			/* workspace for argument values */
-			Datum	   *values;
-			bool	   *nulls;
+			NullableDatum *arguments;
 			int			nelems;
 			/* is it GREATEST or LEAST? */
 			MinMaxOp	op;
@@ -520,8 +513,7 @@ typedef struct ExprEvalStep
 			ExprEvalRowtypeCache *rowcache;
 
 			/* workspace for column values */
-			Datum	   *values;
-			bool	   *nulls;
+			NullableDatum *columns;
 			int			ncolumns;
 		}			fieldstore;
 
@@ -552,8 +544,7 @@ typedef struct ExprEvalStep
 			/* name of constraint */
 			char	   *constraintname;
 			/* where the result of a CHECK constraint will be stored */
-			Datum	   *checkvalue;
-			bool	   *checknull;
+			NullableDatum *check;
 			/* OID of domain type */
 			Oid			resulttype;
 		}			domaincheck;
@@ -600,11 +591,9 @@ typedef struct ExprEvalStep
 		{
 			XmlExpr    *xexpr;	/* original expression node */
 			/* workspace for evaluating named args, if any */
-			Datum	   *named_argvalue;
-			bool	   *named_argnull;
+			NullableDatum *named_args;
 			/* workspace for evaluating unnamed args, if any */
-			Datum	   *argvalue;
-			bool	   *argnull;
+			NullableDatum *args;
 		}			xmlexpr;
 
 		/* for EEOP_JSON_CONSTRUCTOR */
@@ -647,22 +636,14 @@ typedef struct ExprEvalStep
 			int			jumpnull;
 		}			agg_deserialize;
 
-		/* for EEOP_AGG_STRICT_INPUT_CHECK_NULLS / STRICT_INPUT_CHECK_ARGS */
+		/* for STRICT_INPUT_CHECK_ARGS */
 		struct
 		{
 			/*
-			 * For EEOP_AGG_STRICT_INPUT_CHECK_ARGS args contains pointers to
-			 * the NullableDatums that need to be checked for NULLs.
-			 *
-			 * For EEOP_AGG_STRICT_INPUT_CHECK_NULLS nulls contains pointers
-			 * to booleans that need to be checked for NULLs.
-			 *
-			 * Both cases currently need to exist because sometimes the
-			 * to-be-checked nulls are in TupleTableSlot.isnull array, and
-			 * sometimes in FunctionCallInfoBaseData.args[i].isnull.
+			 * ->args contains pointers to the NullableDatums that need to be
+			 * checked for NULLs.
 			 */
 			NullableDatum *args;
-			bool	   *nulls;
 			int			nargs;
 			int			jumpnull;
 		}			agg_strict_input_check;
@@ -707,6 +688,12 @@ typedef struct ExprEvalStep
 			int			setno;
 		}			agg_trans_ordered;
 
+		// FIXME, better way to achieve padding
+		struct
+		{
+			char pad[64 - sizeof(struct {intptr_t	opcode; NullableDatum *result;})];
+		} f;
+
 	}			d;
 } ExprEvalStep;
 
@@ -727,22 +714,18 @@ typedef struct SubscriptingRefState
 	/* at runtime, subscripts are computed in upperindex[]/upperindexnull[] */
 	int			numupper;
 	bool	   *upperprovided;	/* indicates if this position is supplied */
-	Datum	   *upperindex;
-	bool	   *upperindexnull;
+	NullableDatum *upperindex;
 
 	/* similarly for lower indexes, if any */
 	int			numlower;
 	bool	   *lowerprovided;
-	Datum	   *lowerindex;
-	bool	   *lowerindexnull;
+	NullableDatum *lowerindex;
 
 	/* for assignment, new value to assign is evaluated into here */
-	Datum		replacevalue;
-	bool		replacenull;
+	NullableDatum replace;
 
 	/* if we have a nested assignment, sbs_fetch_old puts old value here */
-	Datum		prevvalue;
-	bool		prevnull;
+	NullableDatum prev;
 } SubscriptingRefState;
 
 /* Execution step methods used for SubscriptingRef */
@@ -834,7 +817,7 @@ extern void ExecAggInitGroup(const AggStatePerCallContext *percall, AggStatePerG
 							 FunctionCallInfi fcinfo);
 extern Datum ExecAggCopyTransValue(const AggStatePerCallContext *percall,
 								   Datum newValue, bool newValueIsNull,
-								   Datum oldValue, bool oldValueIsNull);
+								   NullableDatum *oldvalue);
 extern bool ExecEvalPreOrderedDistinctSingle(AggState *aggstate,
 											 AggStatePerTrans pertrans);
 extern bool ExecEvalPreOrderedDistinctMulti(AggState *aggstate,

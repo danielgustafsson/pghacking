@@ -121,16 +121,14 @@ into the flat representation.  Each Expr node might be represented by
 zero, one, or more ExprEvalSteps.
 
 Each ExprEvalStep's work is determined by its opcode (of enum ExprEvalOp)
-and it stores the result of its work into the Datum variable and boolean
-null flag variable pointed to by ExprEvalStep->resvalue/resnull.
-Complex expressions are performed by chaining together several steps.
-For example, "a + b" (one OpExpr, with two Var expressions) would be
-represented as two steps to fetch the Var values, and one step for the
-evaluation of the function underlying the + operator.  The steps for the
-Vars would have their resvalue/resnull pointing directly to the appropriate
-args[].value .isnull elements in the FunctionCallInfoBaseData struct that
-is used by the function evaluation step, thus avoiding extra work to copy
-the result values around.
+and it stores the result of its work into the NullableDatum pointed to by
+ExprEvalStep->result. Complex expressions are performed by chaining together
+several steps. For example, "a + b" (one OpExpr, with two Var expressions)
+would be represented as two steps to fetch the Var values, and one step for
+the evaluation of the function underlying the + operator.  The steps for the
+Vars would have their result point directly to the appropriate args[] element
+in the FunctionCallInfoBaseData struct that is used by the function
+evaluation step, thus avoiding extra work to copy the result values around.
 
 The last entry in a completed ExprState->steps array is always an
 EEOP_DONE_RETURN or EEOP_DONE_NO_RETURN step; this removes the need to
@@ -152,7 +150,7 @@ node into the steps required for execution, recursing as needed for
 sub-expressions.
 
 Each ExecInitExprRec() call has to specify where that subexpression's
-results are to be stored (via the resv/resnull parameters).  This allows
+results are to be stored (via the result parameter).  This allows
 the above scenario of evaluating a (sub-)expression directly into
 fcinfo->args[].value/isnull, but also requires some care: target Datum/isnull
 variables may not be shared with another ExecInitExprRec() unless the
@@ -164,13 +162,12 @@ ExecInitExprRec() pushes new operations into the ExprState->steps array
 using ExprEvalPushStep().  To keep the steps as a consecutively laid out
 array, ExprEvalPushStep() has to repalloc the entire array when there's
 not enough space.  Because of that it is *not* allowed to point directly
-into any of the steps during expression initialization.  Therefore, the
-resv/resnull for a subexpression usually point to some storage that is
-palloc'd separately from the steps array.  For instance, the
-FunctionCallInfoBaseData for a function call step is separately allocated
-rather than being part of the ExprEvalStep array.  The overall result
-of a complete expression is typically returned into the resvalue/resnull
-fields of the ExprState node itself.
+into any of the steps during expression initialization.  Therefore, result
+for a subexpression usually points to some storage that is palloc'd
+separately from the steps array.  For instance, the FunctionCallInfoBaseData
+for a function call step is separately allocated rather than being part of
+the ExprEvalStep array.  The overall result of a complete expression is
+typically returned into the result fields of the ExprState node itself.
 
 Some steps, e.g. boolean expressions, allow skipping evaluation of
 certain subexpressions.  In the flat representation this amounts to
@@ -221,11 +218,11 @@ Targetlist Evaluation
 ExecBuildProjectionInfo builds an ExprState that has the effect of
 evaluating a targetlist into ExprState->resultslot.  A generic targetlist
 expression is executed by evaluating it as discussed above (storing the
-result into the ExprState's resvalue/resnull fields) and then using an
-EEOP_ASSIGN_TMP step to move the result into the appropriate tts_values[]
-and tts_isnull[] array elements of the result slot.  There are special
-fast-path step types (EEOP_ASSIGN_*_VAR) to handle targetlist entries that
-are simple Vars using only one step instead of two.
+result into the ExprState's result field) and then using an EEOP_ASSIGN_TMP
+step to move the result into the appropriate tts_values[] and tts_isnull[]
+array elements of the result slot.  There are special fast-path step types
+(EEOP_ASSIGN_*_VAR) to handle targetlist entries that are simple Vars using
+only one step instead of two.
 
 
 MERGE

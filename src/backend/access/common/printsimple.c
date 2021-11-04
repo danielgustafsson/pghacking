@@ -74,13 +74,13 @@ printsimple(TupleTableSlot *slot, DestReceiver *self)
 		Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
 		Datum		value;
 
-		if (slot->tts_isnull[i])
+		if (slot->tts_values[i].isnull)
 		{
 			pq_sendint32(&buf, -1);
 			continue;
 		}
 
-		value = slot->tts_values[i];
+		value = slot->tts_values[i].value;
 
 		/*
 		 * We can't call the regular type output functions here because we

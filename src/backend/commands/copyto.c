@@ -930,8 +930,8 @@ CopyOneRowTo(CopyToState cstate, TupleTableSlot *slot)
 	foreach(cur, cstate->attnumlist)
 	{
 		int			attnum = lfirst_int(cur);
-		Datum		value = slot->tts_values[attnum - 1];
-		bool		isnull = slot->tts_isnull[attnum - 1];
+		Datum		value = slot->tts_values[attnum - 1].value;
+		bool		isnull = slot->tts_values[attnum - 1].isnull;
 
 		if (!cstate->opts.binary)
 		{

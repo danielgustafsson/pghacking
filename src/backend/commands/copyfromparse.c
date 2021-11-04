@@ -852,7 +852,7 @@ NextCopyFromRawFields(CopyFromState cstate, char ***fields, int *nfields)
  */
 bool
 NextCopyFrom(CopyFromState cstate, ExprContext *econtext,
-			 Datum *values, bool *nulls)
+			 NullableDatum *values)
 {
 	TupleDesc	tupDesc;
 	AttrNumber	num_phys_attrs,
@@ -860,7 +860,6 @@ NextCopyFrom(CopyFromState cstate, ExprContext *econtext,
 				num_defaults = cstate->num_defaults;
 	FmgrInfo   *in_functions = cstate->in_functions;
 	Oid		   *typioparams = cstate->typioparams;
-	int			i;
 	int		   *defmap = cstate->defmap;
 	ExprState **defexprs = cstate->defexprs;
 
@@ -869,9 +868,12 @@ NextCopyFrom(CopyFromState cstate, ExprContext *econtext,
 	attr_count = list_length(cstate->attnumlist);
 
 	/* Initialize all values for row to NULL */
-	MemSet(values, 0, num_phys_attrs * sizeof(Datum));
-	MemSet(nulls, true, num_phys_attrs * sizeof(bool));
-	MemSet(cstate->defaults, false, num_phys_attrs * sizeof(bool));
+	for (int i = 0; i < num_phys_attrs; i++)
+	{
+		values[i].value = (Datum) 0;
+		values[i].isnull = true;
+	}
+	cstate->defaults = (bool *) palloc0(num_phys_attrs * sizeof(bool));
 
 	if (!cstate->opts.binary)
 	{
@@ -942,7 +944,7 @@ NextCopyFrom(CopyFromState cstate, ExprContext *econtext,
 			cstate->cur_attval = string;
 
 			if (string != NULL)
-				nulls[m] = false;
+				values[m].isnull = false;
 
 			if (cstate->defaults[m])
 			{
@@ -953,10 +955,10 @@ NextCopyFrom(CopyFromState cstate, ExprContext *econtext,
 				Assert(econtext != NULL);
 				Assert(CurrentMemoryContext == econtext->ecxt_per_tuple_memory);
 
-				values[m] = ExecEvalExpr(defexprs[m], econtext, &nulls[m]);
+				values[m].value = ExecEvalExpr(defexprs[m], econtext, &nulls[m]);
 			}
 			else
-				values[m] = InputFunctionCall(&in_functions[m],
+				values[m].value = InputFunctionCall(&in_functions[m],
 											  string,
 											  typioparams[m],
 											  att->atttypmod);
@@ -1013,11 +1015,11 @@ NextCopyFrom(CopyFromState cstate, ExprContext *econtext,
 			Form_pg_attribute att = TupleDescAttr(tupDesc, m);
 
 			cstate->cur_attname = NameStr(att->attname);
-			values[m] = CopyReadBinaryAttribute(cstate,
-												&in_functions[m],
-												typioparams[m],
-												att->atttypmod,
-												&nulls[m]);
+			values[m].value = CopyReadBinaryAttribute(cstate,
+													  &in_functions[m],
+													  typioparams[m],
+													  att->atttypmod,
+													  &values[m].isnull);
 			cstate->cur_attname = NULL;
 		}
 	}
@@ -1036,8 +1038,8 @@ NextCopyFrom(CopyFromState cstate, ExprContext *econtext,
 		Assert(econtext != NULL);
 		Assert(CurrentMemoryContext == econtext->ecxt_per_tuple_memory);
 
-		values[defmap[i]] = ExecEvalExpr(defexprs[defmap[i]], econtext,
-										 &nulls[defmap[i]]);
+		values[defmap[i]].value = ExecEvalExpr(defexprs[defmap[i]], econtext,
+										 &values[defmap[i]].isnull);
 	}
 
 	return true;

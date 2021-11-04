@@ -104,6 +104,20 @@ l_pbool_const(bool i)
 }
 
 /*
+ * Emit NullableDatum constant.
+ */
+static inline LLVMValueRef
+l_nullable_datum_const(const NullableDatum *val)
+{
+	LLVMValueRef vals[2];
+
+	vals[0] = l_sizet_const(val->value);
+	vals[1] = l_sbool_const(val->isnull);
+
+	return LLVMConstNamedStruct(StructNullableDatum, vals, 2);
+}
+
+/*
  * Load a pointer member idx from a struct.
  */
 static inline LLVMValueRef
@@ -214,6 +228,21 @@ l_mcxt_switch(LLVMModuleRef mod, LLVMBuilderRef b, LLVMValueRef nc)
 	LLVMBuildStore(b, nc, cur);
 
 	return ret;
+}
+
+/*
+ * Return pointer to the argno'th NullableDatum argument.
+ */
+static inline LLVMValueRef
+l_funcargp(LLVMBuilderRef b, LLVMValueRef v_fcinfo, size_t argno)
+{
+	LLVMValueRef v_args;
+
+	v_args = LLVMBuildStructGEP(b,
+								v_fcinfo,
+								FIELDNO_FUNCTIONCALLINFODATA_ARGS,
+								"");
+	return LLVMBuildStructGEP(b, v_args, argno, "");
 }
 
 /*

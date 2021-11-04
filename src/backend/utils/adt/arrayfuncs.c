@@ -3158,7 +3158,7 @@ array_set(ArrayType *array, int nSubscripts, int *indx,
  * FIXME: update comments
  */
 bool
-array_map_unpack(Datum arrayd, ArrayMapState *amstate, Datum *result, bool *isnull)
+array_map_unpack(Datum arrayd, ArrayMapState *amstate, NullableDatum *result)
 {
 	AnyArrayType *v = DatumGetAnyArrayP(arrayd);
 	int			i;
@@ -3214,15 +3214,15 @@ array_map_unpack(Datum arrayd, ArrayMapState *amstate, Datum *result, bool *isnu
 
 	/* set up state for per-element conversion of first element */
 	amstate->cur = 0;
-	*result = amstate->values[amstate->cur];
-	*isnull = amstate->nulls[amstate->cur];
+	result->value = amstate->values[amstate->cur];
+	result->isnull = amstate->nulls[amstate->cur];
 
 	return true;
 }
 
 bool
 array_map_pack(Oid retType, ArrayMapState *amstate,
-			   Datum *result, bool *isnull)
+			   NullableDatum *result)
 {
 	ArrayMetaState *ret_extra = &amstate->ret_extra;
 	int			typlen;
@@ -3238,22 +3238,22 @@ array_map_pack(Oid retType, ArrayMapState *amstate,
 	/* FIXME: this probably should be handled elsewhere */
 	if (amstate->nitems <= 0)
 	{
-		*result = PointerGetDatum(construct_empty_array(retType));
-		*isnull = true;
+		result->value = PointerGetDatum(construct_empty_array(retType));
+		result->isnull = true;
 
 		return false;
 	}
 
-	amstate->values[amstate->cur] = *result;
-	amstate->nulls[amstate->cur] = *isnull;
+	amstate->values[amstate->cur] = result->value;
+	amstate->nulls[amstate->cur] = result->isnull;
 
 	/* transform next element */
 	if (amstate->cur + 1 < amstate->nitems)
 	{
 		amstate->cur++;
 
-		*result = amstate->values[amstate->cur];
-		*isnull = amstate->nulls[amstate->cur];
+		result->value = amstate->values[amstate->cur];
+		result->isnull = amstate->nulls[amstate->cur];
 
 		return true;
 	}
@@ -3327,8 +3327,8 @@ array_map_pack(Oid retType, ArrayMapState *amstate,
 	pfree(amstate->values);
 	pfree(amstate->nulls);
 
-	*result = PointerGetDatum(resultarr);
-	*isnull = false;
+	result->value = PointerGetDatum(resultarr);
+	result->isnull = false;
 
 	return false;
 }

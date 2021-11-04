@@ -276,7 +276,7 @@ StoreIndexTuple(TupleTableSlot *slot, IndexTuple itup, TupleDesc itupdesc)
 	Assert(slot->tts_tupleDescriptor->natts == itupdesc->natts);
 
 	ExecClearTuple(slot);
-	index_deform_tuple(itup, itupdesc, slot->tts_values, slot->tts_isnull);
+	index_deform_tuple_s(itup, itupdesc, slot->tts_values);
 	ExecStoreVirtualTuple(slot);
 }
 

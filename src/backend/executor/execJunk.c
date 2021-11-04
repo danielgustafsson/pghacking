@@ -251,17 +251,14 @@ ExecFilterJunk(JunkFilter *junkfilter, TupleTableSlot *slot)
 	TupleDesc	cleanTupType;
 	int			cleanLength;
 	int			i;
-	Datum	   *values;
-	bool	   *isnull;
-	Datum	   *old_values;
-	bool	   *old_isnull;
+	NullableDatum *values;
+	NullableDatum *old_values;
 
 	/*
 	 * Extract all the values of the old tuple.
 	 */
 	slot_getallattrs(slot);
 	old_values = slot->tts_values;
-	old_isnull = slot->tts_isnull;
 
 	/*
 	 * get info from the junk filter
@@ -276,7 +273,6 @@ ExecFilterJunk(JunkFilter *junkfilter, TupleTableSlot *slot)
 	 */
 	ExecClearTuple(resultSlot);
 	values = resultSlot->tts_values;
-	isnull = resultSlot->tts_isnull;
 
 	/*
 	 * Transpose data into proper fields of the new tuple.
@@ -286,15 +282,9 @@ ExecFilterJunk(JunkFilter *junkfilter, TupleTableSlot *slot)
 		int			j = cleanMap[i];
 
 		if (j == 0)
-		{
-			values[i] = (Datum) 0;
-			isnull[i] = true;
-		}
+			values[i] = NULL_DATUM;
 		else
-		{
 			values[i] = old_values[j - 1];
-			isnull[i] = old_isnull[j - 1];
-		}
 	}
 
 	/*

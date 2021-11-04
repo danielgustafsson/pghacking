@@ -255,6 +255,60 @@ heap_compute_data_size(TupleDesc tupleDesc,
 }
 
 /*
+ * heap_compute_data_size
+ *		Determine size of the data area of a tuple to be constructed
+ */
+Size
+heap_compute_data_size_s(TupleDesc tupleDesc,
+						 NullableDatum *values)
+{
+	Size		data_length = 0;
+	int			i;
+	int			numberOfAttributes = tupleDesc->natts;
+
+	for (i = 0; i < numberOfAttributes; i++)
+	{
+		Datum		val;
+		Form_pg_attribute atti;
+
+		if (values[i].isnull)
+			continue;
+
+		val = values[i].value;
+		atti = TupleDescAttr(tupleDesc, i);
+
+		if (ATT_IS_PACKABLE(atti) &&
+			VARATT_CAN_MAKE_SHORT(DatumGetPointer(val)))
+		{
+			/*
+			 * we're anticipating converting to a short varlena header, so
+			 * adjust length and don't count any alignment
+			 */
+			data_length += VARATT_CONVERTED_SHORT_SIZE(DatumGetPointer(val));
+		}
+		else if (atti->attlen == -1 &&
+				 VARATT_IS_EXTERNAL_EXPANDED(DatumGetPointer(val)))
+		{
+			/*
+			 * we want to flatten the expanded value so that the constructed
+			 * tuple doesn't depend on it
+			 */
+			data_length = att_align_nominal(data_length, atti->attalign);
+			data_length += EOH_get_flat_size(DatumGetEOHP(val));
+		}
+		else
+		{
+			data_length = att_align_datum(data_length, atti->attalign,
+										  atti->attlen, val);
+			data_length = att_addlength_datum(data_length, atti->attlen,
+											  val);
+		}
+	}
+
+	return data_length;
+}
+
+/*
  * Per-attribute helper for heap_fill_tuple and other routines building tuples.
  *
  * Fill in either a data value or a bit in the null bitmask
@@ -428,6 +482,51 @@ heap_fill_tuple(TupleDesc tupleDesc,
 				 infomask,
 				 values ? values[i] : PointerGetDatum(NULL),
 				 isnull ? isnull[i] : true);
+	}
+
+	Assert((data - start) == data_size);
+}
+
+void
+heap_fill_tuple_s(TupleDesc tupleDesc,
+				  NullableDatum *values,
+				  char *data, Size data_size,
+				  uint16 *infomask, bits8 *bit)
+{
+	bits8	   *bitP;
+	int			bitmask;
+	int			i;
+	int			numberOfAttributes = tupleDesc->natts;
+
+#ifdef USE_ASSERT_CHECKING
+	char	   *start = data;
+#endif
+
+	if (bit != NULL)
+	{
+		bitP = &bit[-1];
+		bitmask = HIGHBIT;
+	}
+	else
+	{
+		/* just to keep compiler quiet */
+		bitP = NULL;
+		bitmask = 0;
+	}
+
+	*infomask &= ~(HEAP_HASNULL | HEAP_HASVARWIDTH | HEAP_HASEXTERNAL);
+
+	for (i = 0; i < numberOfAttributes; i++)
+	{
+		Form_pg_attribute attr = TupleDescAttr(tupleDesc, i);
+
+		fill_val(attr,
+				 bitP ? &bitP : NULL,
+				 &bitmask,
+				 &data,
+				 infomask,
+				 values[i].value,
+				 values[i].isnull);
 	}
 
 	Assert((data - start) == data_size);
@@ -1186,6 +1285,87 @@ heap_form_tuple(TupleDesc tupleDescriptor,
 	return tuple;
 }
 
+extern HeapTuple
+heap_form_tuple_s(TupleDesc tupleDescriptor,
+				  NullableDatum *values)
+{
+	HeapTuple	tuple;			/* return tuple */
+	HeapTupleHeader td;			/* tuple data */
+	Size		len,
+				data_len;
+	int			hoff;
+	bool		hasnull = false;
+	int			numberOfAttributes = tupleDescriptor->natts;
+	int			i;
+
+	if (numberOfAttributes > MaxTupleAttributeNumber)
+		ereport(ERROR,
+				(errcode(ERRCODE_TOO_MANY_COLUMNS),
+				 errmsg("number of columns (%d) exceeds limit (%d)",
+						numberOfAttributes, MaxTupleAttributeNumber)));
+
+	/*
+	 * Check for nulls
+	 */
+	for (i = 0; i < numberOfAttributes; i++)
+	{
+		if (values[i].isnull)
+		{
+			hasnull = true;
+			break;
+		}
+	}
+
+	/*
+	 * Determine total space needed
+	 */
+	len = offsetof(HeapTupleHeaderData, t_bits);
+
+	if (hasnull)
+		len += BITMAPLEN(numberOfAttributes);
+
+	hoff = len = MAXALIGN(len); /* align user data safely */
+
+	data_len = heap_compute_data_size_s(tupleDescriptor, values);
+
+	len += data_len;
+
+	/*
+	 * Allocate and zero the space needed.  Note that the tuple body and
+	 * HeapTupleData management structure are allocated in one chunk.
+	 */
+	tuple = (HeapTuple) palloc0(HEAPTUPLESIZE + len);
+	tuple->t_data = td = (HeapTupleHeader) ((char *) tuple + HEAPTUPLESIZE);
+
+	/*
+	 * And fill in the information.  Note we fill the Datum fields even though
+	 * this tuple may never become a Datum.  This lets HeapTupleHeaderGetDatum
+	 * identify the tuple type if needed.
+	 */
+	tuple->t_len = len;
+	ItemPointerSetInvalid(&(tuple->t_self));
+	tuple->t_tableOid = InvalidOid;
+
+	HeapTupleHeaderSetDatumLength(td, len);
+	HeapTupleHeaderSetTypeId(td, tupleDescriptor->tdtypeid);
+	HeapTupleHeaderSetTypMod(td, tupleDescriptor->tdtypmod);
+	/* We also make sure that t_ctid is invalid unless explicitly set */
+	ItemPointerSetInvalid(&(td->t_ctid));
+
+	HeapTupleHeaderSetNatts(td, numberOfAttributes);
+	td->t_hoff = hoff;
+
+	heap_fill_tuple_s(tupleDescriptor,
+					  values,
+					  (char *) td + hoff,
+					  data_len,
+					  &td->t_infomask,
+					  (hasnull ? td->t_bits : NULL));
+
+	return tuple;
+
+}
+
 /*
  * heap_modify_tuple
  *		form a new tuple from an old tuple and a set of replacement values.
@@ -1419,6 +1599,92 @@ heap_deform_tuple(HeapTuple tuple, TupleDesc tupleDesc,
 		values[attnum] = getmissingattr(tupleDesc, attnum + 1, &isnull[attnum]);
 }
 
+void
+heap_deform_tuple_s(HeapTuple tuple, TupleDesc tupleDesc,
+					NullableDatum *values)
+{
+	HeapTupleHeader tup = tuple->t_data;
+	bool		hasnulls = HeapTupleHasNulls(tuple);
+	int			tdesc_natts = tupleDesc->natts;
+	int			natts;			/* number of atts to extract */
+	int			attnum;
+	char	   *tp;				/* ptr to tuple data */
+	uint32		off;			/* offset in tuple data */
+	bits8	   *bp = tup->t_bits;	/* ptr to null bitmap in tuple */
+	bool		slow = false;	/* can we use/set attcacheoff? */
+
+	natts = HeapTupleHeaderGetNatts(tup);
+
+	/*
+	 * In inheritance situations, it is possible that the given tuple actually
+	 * has more fields than the caller is expecting.  Don't run off the end of
+	 * the caller's arrays.
+	 */
+	natts = Min(natts, tdesc_natts);
+
+	tp = (char *) tup + tup->t_hoff;
+
+	off = 0;
+
+	attnum = 0;
+	for (NullableDatum *value = &values[0]; attnum < natts; attnum++, value++)
+	{
+		Form_pg_attribute thisatt = TupleDescAttr(tupleDesc, attnum);
+
+		if (hasnulls && att_isnull(attnum, bp))
+		{
+			values[attnum] = NULL_DATUM;
+			slow = true;		/* can't use attcacheoff anymore */
+			continue;
+		}
+
+		value->isnull = false;
+
+		if (!slow && thisatt->attcacheoff >= 0)
+			off = thisatt->attcacheoff;
+		else if (thisatt->attlen == -1)
+		{
+			/*
+			 * We can only cache the offset for a varlena attribute if the
+			 * offset is already suitably aligned, so that there would be no
+			 * pad bytes in any case: then the offset will be valid for either
+			 * an aligned or unaligned value.
+			 */
+			if (!slow &&
+				off == att_align_nominal(off, thisatt->attalign))
+				thisatt->attcacheoff = off;
+			else
+			{
+				off = att_align_pointer(off, thisatt->attalign, -1,
+										tp + off);
+				slow = true;
+			}
+		}
+		else
+		{
+			/* not varlena, so safe to use att_align_nominal */
+			off = att_align_nominal(off, thisatt->attalign);
+
+			if (!slow)
+				thisatt->attcacheoff = off;
+		}
+
+		value->value = fetchatt(thisatt, tp + off);
+
+		off = att_addlength_pointer(off, thisatt->attlen, tp + off);
+
+		if (thisatt->attlen <= 0)
+			slow = true;		/* can't use attcacheoff anymore */
+	}
+
+	/*
+	 * If tuple doesn't have all the atts indicated by tupleDesc, read the
+	 * rest as nulls or missing values as appropriate.
+	 */
+	for (; attnum < tdesc_natts; attnum++)
+		values[attnum].value = getmissingattr(tupleDesc, attnum + 1, &values[attnum].isnull);
+}
+
 /*
  * heap_freetuple
  */
@@ -1504,6 +1770,72 @@ heap_form_minimal_tuple(TupleDesc tupleDescriptor,
 					data_len,
 					&tuple->t_infomask,
 					(hasnull ? tuple->t_bits : NULL));
+
+	return tuple;
+}
+
+MinimalTuple
+heap_form_minimal_tuple_s(TupleDesc tupleDescriptor,
+						  NullableDatum *values)
+{
+	MinimalTuple tuple;			/* return tuple */
+	Size		len,
+				data_len;
+	int			hoff;
+	bool		hasnull = false;
+	int			numberOfAttributes = tupleDescriptor->natts;
+	int			i;
+
+	if (numberOfAttributes > MaxTupleAttributeNumber)
+		ereport(ERROR,
+				(errcode(ERRCODE_TOO_MANY_COLUMNS),
+				 errmsg("number of columns (%d) exceeds limit (%d)",
+						numberOfAttributes, MaxTupleAttributeNumber)));
+
+	/*
+	 * Check for nulls
+	 */
+	for (i = 0; i < numberOfAttributes; i++)
+	{
+		if (values[i].isnull)
+		{
+			hasnull = true;
+			break;
+		}
+	}
+
+	/*
+	 * Determine total space needed
+	 */
+	len = SizeofMinimalTupleHeader;
+
+	if (hasnull)
+		len += BITMAPLEN(numberOfAttributes);
+
+	hoff = len = MAXALIGN(len); /* align user data safely */
+
+	data_len = heap_compute_data_size_s(tupleDescriptor, values);
+
+	len += data_len;
+
+	/*
+	 * Allocate and zero the space needed.
+	 */
+	tuple = (MinimalTuple) palloc0(len);
+
+	/*
+	 * And fill in the information.
+	 */
+	tuple->t_len = len;
+	HeapTupleHeaderSetNatts(tuple, numberOfAttributes);
+	tuple->t_hoff = hoff + MINIMAL_TUPLE_OFFSET;
+
+	heap_fill_tuple_s(tupleDescriptor,
+					  values,
+					  (char *) tuple + hoff,
+					  data_len,
+					  &tuple->t_infomask,
+					  (hasnull ? tuple->t_bits : NULL));
 
 	return tuple;
 }

@@ -171,27 +171,25 @@ tts_virtual_materialize(TupleTableSlot *slot)
 	for (int natt = 0; natt < desc->natts; natt++)
 	{
 		Form_pg_attribute att = TupleDescAttr(desc, natt);
-		Datum		val;
+		NullableDatum *val = &slot->tts_values[natt];
 
-		if (att->attbyval || slot->tts_isnull[natt])
+		if (att->attbyval || val->isnull)
 			continue;
 
-		val = slot->tts_values[natt];
-
 		if (att->attlen == -1 &&
-			VARATT_IS_EXTERNAL_EXPANDED(DatumGetPointer(val)))
+			VARATT_IS_EXTERNAL_EXPANDED(DatumGetPointer(val->value)))
 		{
 			/*
 			 * We want to flatten the expanded value so that the materialized
 			 * slot doesn't depend on it.
 			 */
 			sz = att_align_nominal(sz, att->attalign);
-			sz += EOH_get_flat_size(DatumGetEOHP(val));
+			sz += EOH_get_flat_size(DatumGetEOHP(val->value));
 		}
 		else
 		{
 			sz = att_align_nominal(sz, att->attalign);
-			sz = att_addlength_datum(sz, att->attlen, val);
+			sz = att_addlength_datum(sz, att->attlen, val->value);
 		}
 	}
 
@@ -207,15 +205,13 @@ tts_virtual_materialize(TupleTableSlot *slot)
 	for (int natt = 0; natt < desc->natts; natt++)
 	{
 		Form_pg_attribute att = TupleDescAttr(desc, natt);
-		Datum		val;
+		NullableDatum *val = &slot->tts_values[natt];
 
-		if (att->attbyval || slot->tts_isnull[natt])
+		if (att->attbyval || val->isnull)
 			continue;
 
-		val = slot->tts_values[natt];
-
 		if (att->attlen == -1 &&
-			VARATT_IS_EXTERNAL_EXPANDED(DatumGetPointer(val)))
+			VARATT_IS_EXTERNAL_EXPANDED(DatumGetPointer(val->value)))
 		{
 			Size		data_length;
 
@@ -223,14 +219,14 @@ tts_virtual_materialize(TupleTableSlot *slot)
 			 * We want to flatten the expanded value so that the materialized
 			 * slot doesn't depend on it.
 			 */
-			ExpandedObjectHeader *eoh = DatumGetEOHP(val);
+			ExpandedObjectHeader *eoh = DatumGetEOHP(val->value);
 
 			data = (char *) att_align_nominal(data,
 											  att->attalign);
 			data_length = EOH_get_flat_size(eoh);
 			EOH_flatten_into(eoh, data, data_length);
 
-			slot->tts_values[natt] = PointerGetDatum(data);
+			val->value = PointerGetDatum(data);
 			data += data_length;
 		}
 		else
@@ -238,11 +234,12 @@ tts_virtual_materialize(TupleTableSlot *slot)
 			Size		data_length = 0;
 
 			data = (char *) att_align_nominal(data, att->attalign);
-			data_length = att_addlength_datum(data_length, att->attlen, val);
+			data_length = att_addlength_datum(data_length, att->attlen,
+											  val->value);
 
-			memcpy(data, DatumGetPointer(val), data_length);
+			memcpy(data, DatumGetPointer(val->value), data_length);
 
-			slot->tts_values[natt] = PointerGetDatum(data);
+			val->value = PointerGetDatum(data);
 			data += data_length;
 		}
 	}
@@ -259,11 +256,8 @@ tts_virtual_copyslot(TupleTableSlot *dstslot, TupleTableSlot *srcslot)
 
 	slot_getallattrs(srcslot);
 
-	for (int natt = 0; natt < srcdesc->natts; natt++)
-	{
-		dstslot->tts_values[natt] = srcslot->tts_values[natt];
-		dstslot->tts_isnull[natt] = srcslot->tts_isnull[natt];
-	}
+	memcpy(dstslot->tts_values, srcslot->tts_values,
+		   sizeof(NullableDatum) * srcdesc->natts);
 
 	dstslot->tts_nvalid = srcdesc->natts;
 	dstslot->tts_flags &= ~TTS_FLAG_EMPTY;
@@ -277,9 +271,8 @@ tts_virtual_copy_heap_tuple(TupleTableSlot *slot)
 {
 	Assert(!TTS_EMPTY(slot));
 
-	return heap_form_tuple(slot->tts_tupleDescriptor,
-						   slot->tts_values,
-						   slot->tts_isnull);
+	return heap_form_tuple_s(slot->tts_tupleDescriptor,
+							 slot->tts_values);
 }
 
 static MinimalTuple
@@ -287,9 +280,8 @@ tts_virtual_copy_minimal_tuple(TupleTableSlot *slot)
 {
 	Assert(!TTS_EMPTY(slot));
 
-	return heap_form_minimal_tuple(slot->tts_tupleDescriptor,
-								   slot->tts_values,
-								   slot->tts_isnull);
+	return heap_form_minimal_tuple_s(slot->tts_tupleDescriptor,
+									 slot->tts_values);
 }
 
 
@@ -378,9 +370,8 @@ tts_heap_materialize(TupleTableSlot *slot)
 	hslot->off = 0;
 
 	if (!hslot->tuple)
-		hslot->tuple = heap_form_tuple(slot->tts_tupleDescriptor,
-									   slot->tts_values,
-									   slot->tts_isnull);
+		hslot->tuple = heap_form_tuple_s(slot->tts_tupleDescriptor,
+										 slot->tts_values);
 	else
 	{
 		/*
@@ -546,9 +537,8 @@ tts_minimal_materialize(TupleTableSlot *slot)
 
 	if (!mslot->mintuple)
 	{
-		mslot->mintuple = heap_form_minimal_tuple(slot->tts_tupleDescriptor,
-												  slot->tts_values,
-												  slot->tts_isnull);
+		mslot->mintuple = heap_form_minimal_tuple_s(slot->tts_tupleDescriptor,
+													slot->tts_values);
 	}
 	else
 	{
@@ -746,9 +736,8 @@ tts_buffer_heap_materialize(TupleTableSlot *slot)
 		 * tuples in a buffer slot, which then also needs to be
 		 * materializable.
 		 */
-		bslot->base.tuple = heap_form_tuple(slot->tts_tupleDescriptor,
-											slot->tts_values,
-											slot->tts_isnull);
+		bslot->base.tuple = heap_form_tuple_s(slot->tts_tupleDescriptor,
+											  slot->tts_values);
 	}
 	else
 	{
@@ -927,8 +916,7 @@ slot_deform_heap_tuple(TupleTableSlot *slot, HeapTuple tuple, uint32 *offp,
 					   int natts)
 {
 	TupleDesc	tupleDesc = slot->tts_tupleDescriptor;
-	Datum	   *values = slot->tts_values;
-	bool	   *isnull = slot->tts_isnull;
+	NullableDatum *values = slot->tts_values;
 	HeapTupleHeader tup = tuple->t_data;
 	bool		hasnulls = HeapTupleHasNulls(tuple);
 	int			attnum;
@@ -960,19 +948,18 @@ slot_deform_heap_tuple(TupleTableSlot *slot, HeapTuple tuple, uint32 *offp,
 
 	tp = (char *) tup + tup->t_hoff;
 
-	for (; attnum < natts; attnum++)
+	for (NullableDatum *value = &values[attnum]; attnum < natts; attnum++, value++)
 	{
 		Form_pg_attribute thisatt = TupleDescAttr(tupleDesc, attnum);
 
 		if (hasnulls && att_isnull(attnum, bp))
 		{
-			values[attnum] = (Datum) 0;
-			isnull[attnum] = true;
+			*value = NULL_DATUM;
 			slow = true;		/* can't use attcacheoff anymore */
 			continue;
 		}
 
-		isnull[attnum] = false;
+		value->isnull = false;
 
 		if (!slow && thisatt->attcacheoff >= 0)
 			off = thisatt->attcacheoff;
@@ -1003,7 +990,7 @@ slot_deform_heap_tuple(TupleTableSlot *slot, HeapTuple tuple, uint32 *offp,
 				thisatt->attcacheoff = off;
 		}
 
-		values[attnum] = fetchatt(thisatt, tp + off);
+		value->value = fetchatt(thisatt, tp + off);
 
 		off = att_addlength_pointer(off, thisatt->attlen, tp + off);
 
@@ -1125,8 +1112,7 @@ MakeTupleTableSlot(TupleDesc tupleDesc,
 	 */
 	if (tupleDesc)
 		allocsz = MAXALIGN(basesz) +
-			MAXALIGN(tupleDesc->natts * sizeof(Datum)) +
-			MAXALIGN(tupleDesc->natts * sizeof(bool));
+			MAXALIGN(tupleDesc->natts * sizeof(NullableDatum));
 	else
 		allocsz = basesz;
 
@@ -1143,13 +1129,9 @@ MakeTupleTableSlot(TupleDesc tupleDesc,
 
 	if (tupleDesc != NULL)
 	{
-		slot->tts_values = (Datum *)
+		slot->tts_values = (NullableDatum *)
 			(((char *) slot)
 			 + MAXALIGN(basesz));
-		slot->tts_isnull = (bool *)
-			(((char *) slot)
-			 + MAXALIGN(basesz)
-			 + MAXALIGN(tupleDesc->natts * sizeof(Datum)));
 
 		PinTupleDesc(tupleDesc);
 	}
@@ -1214,8 +1196,6 @@ ExecResetTupleTable(List *tupleTable,	/* tuple table */
 			{
 				if (slot->tts_values)
 					pfree(slot->tts_values);
-				if (slot->tts_isnull)
-					pfree(slot->tts_isnull);
 			}
 			pfree(slot);
 		}
@@ -1264,8 +1244,6 @@ ExecDropSingleTupleTableSlot(TupleTableSlot *slot)
 	{
 		if (slot->tts_values)
 			pfree(slot->tts_values);
-		if (slot->tts_isnull)
-			pfree(slot->tts_isnull);
 	}
 	pfree(slot);
 }
@@ -1304,8 +1282,6 @@ ExecSetSlotDescriptor(TupleTableSlot *slot, /* slot to change */
 
 	if (slot->tts_values)
 		pfree(slot->tts_values);
-	if (slot->tts_isnull)
-		pfree(slot->tts_isnull);
 
 	/*
 	 * Install the new descriptor; if it's refcounted, bump its refcount.
@@ -1314,13 +1290,11 @@ ExecSetSlotDescriptor(TupleTableSlot *slot, /* slot to change */
 	PinTupleDesc(tupdesc);
 
 	/*
-	 * Allocate Datum/isnull arrays of the appropriate size.  These must have
-	 * the same lifetime as the slot, so allocate in the slot's own context.
+	 * Allocate NullableDatum array of the appropriate size.  Must have the
+	 * same lifetime as the slot, so allocate in the slot's own context.
 	 */
-	slot->tts_values = (Datum *)
-		MemoryContextAlloc(slot->tts_mcxt, tupdesc->natts * sizeof(Datum));
-	slot->tts_isnull = (bool *)
-		MemoryContextAlloc(slot->tts_mcxt, tupdesc->natts * sizeof(bool));
+	slot->tts_values = (NullableDatum *)
+		MemoryContextAlloc(slot->tts_mcxt, tupdesc->natts * sizeof(NullableDatum));
 }
 
 /* --------------------------------
@@ -1493,8 +1467,8 @@ ExecForceStoreHeapTuple(HeapTuple tuple,
 	else
 	{
 		ExecClearTuple(slot);
-		heap_deform_tuple(tuple, slot->tts_tupleDescriptor,
-						  slot->tts_values, slot->tts_isnull);
+		heap_deform_tuple_s(tuple, slot->tts_tupleDescriptor,
+							slot->tts_values);
 		ExecStoreVirtualTuple(slot);
 
 		if (shouldFree)
@@ -1526,8 +1500,8 @@ ExecForceStoreMinimalTuple(MinimalTuple mtup,
 
 		htup.t_len = mtup->t_len + MINIMAL_TUPLE_OFFSET;
 		htup.t_data = (HeapTupleHeader) ((char *) mtup - MINIMAL_TUPLE_OFFSET);
-		heap_deform_tuple(&htup, slot->tts_tupleDescriptor,
-						  slot->tts_values, slot->tts_isnull);
+		heap_deform_tuple_s(&htup, slot->tts_tupleDescriptor,
+							slot->tts_values);
 		ExecStoreVirtualTuple(slot);
 
 		if (shouldFree)
@@ -1588,10 +1562,8 @@ ExecStoreAllNullTuple(TupleTableSlot *slot)
 	/*
 	 * Fill all the columns of the virtual tuple with nulls
 	 */
-	MemSet(slot->tts_values, 0,
-		   slot->tts_tupleDescriptor->natts * sizeof(Datum));
-	memset(slot->tts_isnull, true,
-		   slot->tts_tupleDescriptor->natts * sizeof(bool));
+	for (int i = 0; i < slot->tts_tupleDescriptor->natts; i++)
+		slot->tts_values[i] = NULL_DATUM;
 
 	return ExecStoreVirtualTuple(slot);
 }
@@ -1617,8 +1589,8 @@ ExecStoreHeapTupleDatum(Datum data, TupleTableSlot *slot)
 
 	ExecClearTuple(slot);
 
-	heap_deform_tuple(&tuple, slot->tts_tupleDescriptor,
-					  slot->tts_values, slot->tts_isnull);
+	heap_deform_tuple_s(&tuple, slot->tts_tupleDescriptor,
+						slot->tts_values);
 	ExecStoreVirtualTuple(slot);
 }
 
@@ -1876,10 +1848,8 @@ slot_getmissingattrs(TupleTableSlot *slot, int startAttNum, int lastAttNum)
 	if (!attrmiss)
 	{
 		/* no missing values array at all, so just fill everything in as NULL */
-		memset(slot->tts_values + startAttNum, 0,
-			   (lastAttNum - startAttNum) * sizeof(Datum));
-		memset(slot->tts_isnull + startAttNum, 1,
-			   (lastAttNum - startAttNum) * sizeof(bool));
+		for (int i = startAttNum; i < lastAttNum; i++)
+			slot->tts_values[i] = NULL_DATUM;
 	}
 	else
 	{
@@ -1890,8 +1860,8 @@ slot_getmissingattrs(TupleTableSlot *slot, int startAttNum, int lastAttNum)
 			 missattnum < lastAttNum;
 			 missattnum++)
 		{
-			slot->tts_values[missattnum] = attrmiss[missattnum].am_value;
-			slot->tts_isnull[missattnum] = !attrmiss[missattnum].am_present;
+			slot->tts_values[missattnum].value = attrmiss[missattnum].am_value;
+			slot->tts_values[missattnum].isnull = !attrmiss[missattnum].am_present;
 		}
 	}
 }
@@ -2282,8 +2252,11 @@ do_tup_output(TupOutputState *tstate, Datum *values, bool *isnull)
 	ExecClearTuple(slot);
 
 	/* insert data */
-	memcpy(slot->tts_values, values, natts * sizeof(Datum));
-	memcpy(slot->tts_isnull, isnull, natts * sizeof(bool));
+	for (int i = 0; i < natts; i++)
+	{
+		slot->tts_values[i].value = values[i];
+		slot->tts_values[i].isnull = isnull[i];
+	}
 
 	/* mark slot as containing a virtual tuple */
 	ExecStoreVirtualTuple(slot);

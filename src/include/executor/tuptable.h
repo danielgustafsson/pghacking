@@ -82,9 +82,9 @@
  * by the slot and should be freed when the slot's reference to the tuple is
  * dropped.
  *
- * tts_values/tts_isnull are allocated either when the slot is created (when
- * the descriptor is provided), or when a descriptor is assigned to the slot;
- * they are of length equal to the descriptor's natts.
+ * tts_values is allocated either when the slot is created (when the
+ * descriptor is provided), or when a descriptor is assigned to the slot; it
+ * is of a length equal to the descriptor's natts.
  *
  * The TTS_FLAG_SLOW flag is saved state for
  * slot_deform_heap_tuple, and should not be touched by any other code.
@@ -122,9 +122,7 @@ typedef struct TupleTableSlot
 #define FIELDNO_TUPLETABLESLOT_TUPLEDESCRIPTOR 4
 	TupleDesc	tts_tupleDescriptor;	/* slot's tuple descriptor */
 #define FIELDNO_TUPLETABLESLOT_VALUES 5
-	Datum	   *tts_values;		/* current per-attribute values */
-#define FIELDNO_TUPLETABLESLOT_ISNULL 6
-	bool	   *tts_isnull;		/* current per-attribute isnull flags */
+	NullableDatum *tts_values;		/* current per-attribute values */
 	MemoryContext tts_mcxt;		/* slot itself is in this context */
 	ItemPointerData tts_tid;	/* stored tuple's tid */
 	Oid			tts_tableOid;	/* table oid of tuple */
@@ -378,7 +376,7 @@ slot_attisnull(TupleTableSlot *slot, int attnum)
 	if (attnum > slot->tts_nvalid)
 		slot_getsomeattrs(slot, attnum);
 
-	return slot->tts_isnull[attnum - 1];
+	return slot->tts_values[attnum - 1].isnull;
 }
 
 /*
@@ -393,9 +391,9 @@ slot_getattr(TupleTableSlot *slot, int attnum,
 	if (attnum > slot->tts_nvalid)
 		slot_getsomeattrs(slot, attnum);
 
-	*isnull = slot->tts_isnull[attnum - 1];
+	*isnull = slot->tts_values[attnum - 1].isnull;
 
-	return slot->tts_values[attnum - 1];
+	return slot->tts_values[attnum - 1].value;
 }
 
 /*

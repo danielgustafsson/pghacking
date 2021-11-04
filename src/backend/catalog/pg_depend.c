@@ -119,16 +119,16 @@ recordMultipleDependencies(const ObjectAddress *depender,
 		 * Record the dependency.  Note we don't bother to check for duplicate
 		 * dependencies; there's no harm in them.
 		 */
-		slot[slot_stored_count]->tts_values[Anum_pg_depend_refclassid - 1] = ObjectIdGetDatum(referenced->classId);
-		slot[slot_stored_count]->tts_values[Anum_pg_depend_refobjid - 1] = ObjectIdGetDatum(referenced->objectId);
-		slot[slot_stored_count]->tts_values[Anum_pg_depend_refobjsubid - 1] = Int32GetDatum(referenced->objectSubId);
-		slot[slot_stored_count]->tts_values[Anum_pg_depend_deptype - 1] = CharGetDatum((char) behavior);
-		slot[slot_stored_count]->tts_values[Anum_pg_depend_classid - 1] = ObjectIdGetDatum(depender->classId);
-		slot[slot_stored_count]->tts_values[Anum_pg_depend_objid - 1] = ObjectIdGetDatum(depender->objectId);
-		slot[slot_stored_count]->tts_values[Anum_pg_depend_objsubid - 1] = Int32GetDatum(depender->objectSubId);
+		slot[slot_stored_count]->tts_values[Anum_pg_depend_refclassid - 1].value = ObjectIdGetDatum(referenced->classId);
+		slot[slot_stored_count]->tts_values[Anum_pg_depend_refobjid - 1].value = ObjectIdGetDatum(referenced->objectId);
+		slot[slot_stored_count]->tts_values[Anum_pg_depend_refobjsubid - 1].value = Int32GetDatum(referenced->objectSubId);
+		slot[slot_stored_count]->tts_values[Anum_pg_depend_deptype - 1].value = CharGetDatum((char) behavior);
+		slot[slot_stored_count]->tts_values[Anum_pg_depend_classid - 1].value = ObjectIdGetDatum(depender->classId);
+		slot[slot_stored_count]->tts_values[Anum_pg_depend_objid - 1].value = ObjectIdGetDatum(depender->objectId);
+		slot[slot_stored_count]->tts_values[Anum_pg_depend_objsubid - 1].value = Int32GetDatum(depender->objectSubId);
 
-		memset(slot[slot_stored_count]->tts_isnull, false,
-			   slot[slot_stored_count]->tts_tupleDescriptor->natts * sizeof(bool));
+		for (int a = 0; a < slot[slot_stored_count]->tts_tupleDescriptor->natts; a++)
+			slot[slot_stored_count]->tts_values[a].isnull = false;
 
 		ExecStoreVirtualTuple(slot[slot_stored_count]);
 		slot_stored_count++;

@@ -3384,8 +3384,7 @@ exec_stmt_return_next(PLpgSQL_execstate *estate,
 			case PLPGSQL_DTYPE_VAR:
 				{
 					PLpgSQL_var *var = (PLpgSQL_var *) retvar;
-					Datum		retval = var->value;
-					bool		isNull = var->isnull;
+					NullableDatum retval = {var->value, var->isnull};
 					Form_pg_attribute attr = TupleDescAttr(tupdesc, 0);
 
 					if (natts != 1)
@@ -3394,21 +3393,21 @@ exec_stmt_return_next(PLpgSQL_execstate *estate,
 								 errmsg("wrong result type supplied in RETURN NEXT")));
 
 					/* let's be very paranoid about the cast step */
-					retval = MakeExpandedObjectReadOnly(retval,
-														isNull,
-														var->datatype->typlen);
+					retval.value = MakeExpandedObjectReadOnly(retval.value,
+															  retval.isnull,
+															  var->datatype->typlen);
 
 					/* coerce type if needed */
-					retval = exec_cast_value(estate,
-											 retval,
-											 &isNull,
-											 var->datatype->typoid,
-											 var->datatype->atttypmod,
-											 attr->atttypid,
-											 attr->atttypmod);
+					retval.value = exec_cast_value(estate,
+												   retval.value,
+												   &retval.isnull,
+												   var->datatype->typoid,
+												   var->datatype->atttypmod,
+												   attr->atttypid,
+												   attr->atttypmod);
 
-					tuplestore_putvalues(estate->tuple_store, tupdesc,
-										 &retval, &isNull);
+					tuplestore_putvalues_s(estate->tuple_store, tupdesc,
+										   &retval);
 				}
 				break;
 
@@ -3463,21 +3462,20 @@ exec_stmt_return_next(PLpgSQL_execstate *estate,
 	}
 	else if (stmt->expr)
 	{
-		Datum		retval;
-		bool		isNull;
+		NullableDatum retval;
 		Oid			rettype;
 		int32		rettypmod;
 
-		retval = exec_eval_expr(estate,
-								stmt->expr,
-								&isNull,
-								&rettype,
-								&rettypmod);
+		retval.value = exec_eval_expr(estate,
+									  stmt->expr,
+									  &retval.isnull,
+									  &rettype,
+									  &rettypmod);
 
 		if (estate->retistuple)
 		{
 			/* Expression should be of RECORD or composite type */
-			if (!isNull)
+			if (!retval.isnull)
 			{
 				HeapTupleData tmptup;
 				TupleDesc	retvaldesc;
@@ -3490,7 +3488,7 @@ exec_stmt_return_next(PLpgSQL_execstate *estate,
 
 				/* Use eval_mcontext for tuple conversion work */
 				oldcontext = MemoryContextSwitchTo(get_eval_mcontext(estate));
-				retvaldesc = deconstruct_composite_datum(retval, &tmptup);
+				retvaldesc = deconstruct_composite_datum(retval.value, &tmptup);
 				tuple = &tmptup;
 				tupmap = convert_tuples_by_position(retvaldesc, tupdesc,
 													gettext_noop("returned record type does not match expected record type"));
@@ -3503,16 +3501,14 @@ exec_stmt_return_next(PLpgSQL_execstate *estate,
 			else
 			{
 				/* Composite NULL --- store a row of nulls */
-				Datum	   *nulldatums;
-				bool	   *nullflags;
+				NullableDatum *nulldatums;
 
-				nulldatums = (Datum *)
-					eval_mcontext_alloc0(estate, natts * sizeof(Datum));
-				nullflags = (bool *)
-					eval_mcontext_alloc(estate, natts * sizeof(bool));
-				memset(nullflags, true, natts * sizeof(bool));
-				tuplestore_putvalues(estate->tuple_store, tupdesc,
-									 nulldatums, nullflags);
+				nulldatums = (NullableDatum *)
+					eval_mcontext_alloc0(estate, natts * sizeof(NullableDatum));
+				for (int i = 0; i < natts; i++)
+					nulldatums[i].isnull = true;
+				tuplestore_putvalues_s(estate->tuple_store, tupdesc,
+									   nulldatums);
 			}
 		}
 		else
@@ -3526,16 +3522,16 @@ exec_stmt_return_next(PLpgSQL_execstate *estate,
 						 errmsg("wrong result type supplied in RETURN NEXT")));
 
 			/* coerce type if needed */
-			retval = exec_cast_value(estate,
-									 retval,
-									 &isNull,
-									 rettype,
-									 rettypmod,
-									 attr->atttypid,
-									 attr->atttypmod);
+			retval.value = exec_cast_value(estate,
+										   retval.value,
+										   &retval.isnull,
+										   rettype,
+										   rettypmod,
+										   attr->atttypid,
+										   attr->atttypmod);
 
-			tuplestore_putvalues(estate->tuple_store, tupdesc,
-								 &retval, &isNull);
+			tuplestore_putvalues_s(estate->tuple_store, tupdesc,
+								   &retval);
 		}
 	}
 	else
@@ -6635,7 +6631,9 @@ plpgsql_param_eval_recfield(void *callback_private, ExprContext *econtext,
 						format_type_be(param->paramtype))));
 
 	/* OK to fetch the field value. */
-	result->value = expanded_record_get_field(erh, recfield->finfo.fnumber, &result->isnull);
+	result->value = expanded_record_get_field(erh,
+											  recfield->finfo.fnumber,
+											  &result->isnull);
 }
 
 /*
@@ -7746,8 +7744,8 @@ do_cast_value(PLpgSQL_execstate *estate,
 
 		oldcontext = MemoryContextSwitchTo(get_eval_mcontext(estate));
 
-		econtext->caseValue_datum = value;
-		econtext->caseValue_isNull = *isnull;
+		econtext->caseValue.value = value;
+		econtext->caseValue.isnull = *isnull;
 
 		cast_entry->cast_in_use = true;
 

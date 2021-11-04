@@ -78,6 +78,9 @@ typedef struct NullableDatum
 	/* due to alignment padding this could be used for flags for free */
 } NullableDatum;
 
+/* so we can annotate value with valgrind's undefined later */
+#define NULL_DATUM ((NullableDatum){(Datum) 0, true})
+
 #define SIZEOF_DATUM SIZEOF_VOID_P
 
 /*

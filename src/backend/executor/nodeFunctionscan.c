@@ -197,8 +197,7 @@ FunctionNext(FunctionScanState *node)
 			 */
 			for (i = 0; i < fs->colcount; i++)
 			{
-				scanslot->tts_values[att] = (Datum) 0;
-				scanslot->tts_isnull[att] = true;
+				scanslot->tts_values[att] = NULL_DATUM;
 				att++;
 			}
 		}
@@ -212,7 +211,6 @@ FunctionNext(FunctionScanState *node)
 			for (i = 0; i < fs->colcount; i++)
 			{
 				scanslot->tts_values[att] = fs->func_slot->tts_values[i];
-				scanslot->tts_isnull[att] = fs->func_slot->tts_isnull[i];
 				att++;
 			}
 
@@ -229,8 +227,8 @@ FunctionNext(FunctionScanState *node)
 	 */
 	if (node->ordinality)
 	{
-		scanslot->tts_values[att] = Int64GetDatumFast(node->ordinal);
-		scanslot->tts_isnull[att] = false;
+		scanslot->tts_values[att].value = Int64GetDatumFast(node->ordinal);
+		scanslot->tts_values[att].isnull = false;
 	}
 
 	/*

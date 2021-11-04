@@ -89,8 +89,7 @@ ValuesNext(ValuesScanState *node)
 		List	   *exprlist = node->exprlists[curr_idx];
 		List	   *exprstatelist = node->exprstatelists[curr_idx];
 		MemoryContext oldContext;
-		Datum	   *values;
-		bool	   *isnull;
+		NullableDatum *values;
 		ListCell   *lc;
 		int			resind;
 
@@ -137,7 +136,6 @@ ValuesNext(ValuesScanState *node)
 		 * already did ExecClearTuple(slot).
 		 */
 		values = slot->tts_values;
-		isnull = slot->tts_isnull;
 
 		resind = 0;
 		foreach(lc, exprstatelist)
@@ -146,9 +144,9 @@ ValuesNext(ValuesScanState *node)
 			Form_pg_attribute attr = TupleDescAttr(slot->tts_tupleDescriptor,
 												   resind);
 
-			values[resind] = ExecEvalExpr(estate,
-										  econtext,
-										  &isnull[resind]);
+			values[resind].value = ExecEvalExpr(estate,
+												econtext,
+												&values[resind].isnull);
 
 			/*
 			 * We must force any R/W expanded datums to read-only state, in
@@ -156,9 +154,10 @@ ValuesNext(ValuesScanState *node)
 			 * expressions, or in case we skip the output projection and the
 			 * output column is multiply referenced in higher plan nodes.
 			 */
-			values[resind] = MakeExpandedObjectReadOnly(values[resind],
-														isnull[resind],
-														attr->attlen);
+			values[resind].value =
+				MakeExpandedObjectReadOnly(values[resind].value,
+										   values[resind].isnull,
+										   attr->attlen);
 
 			resind++;
 		}

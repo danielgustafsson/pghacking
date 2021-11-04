@@ -218,6 +218,160 @@ index_form_tuple_context(TupleDesc tupleDescriptor,
 	return tuple;
 }
 
+IndexTuple
+index_form_tuple_s(TupleDesc tupleDescriptor,
+				   NullableDatum *values)
+{
+	char	   *tp;				/* tuple pointer */
+	IndexTuple	tuple;			/* return tuple */
+	Size		size,
+				data_size,
+				hoff;
+	int			i;
+	unsigned short infomask = 0;
+	bool		hasnull = false;
+	uint16		tupmask = 0;
+	int			numberOfAttributes = tupleDescriptor->natts;
+
+#ifdef TOAST_INDEX_HACK
+	NullableDatum untoasted_values[INDEX_MAX_KEYS];
+	bool		untoasted_free[INDEX_MAX_KEYS];
+#endif
+
+	if (numberOfAttributes > INDEX_MAX_KEYS)
+		ereport(ERROR,
+				(errcode(ERRCODE_TOO_MANY_COLUMNS),
+				 errmsg("number of index columns (%d) exceeds limit (%d)",
+						numberOfAttributes, INDEX_MAX_KEYS)));
+
+#ifdef TOAST_INDEX_HACK
+	for (i = 0; i < numberOfAttributes; i++)
+	{
+		Form_pg_attribute att = TupleDescAttr(tupleDescriptor, i);
+
+		untoasted_values[i] = values[i];
+		untoasted_free[i] = false;
+
+		/* Do nothing if value is NULL or not of varlena type */
+		if (values[i].isnull || att->attlen != -1)
+			continue;
+
+		/*
+		 * If value is stored EXTERNAL, must fetch it so we are not depending
+		 * on outside storage.  This should be improved someday.
+		 */
+		if (VARATT_IS_EXTERNAL(DatumGetPointer(values[i].value)))
+		{
+			untoasted_values[i].value =
+				PointerGetDatum(detoast_external_attr((struct varlena *)
+													  DatumGetPointer(values[i].value)));
+			untoasted_free[i] = true;
+		}
+
+		/*
+		 * If value is above size target, and is of a compressible datatype,
+		 * try to compress it in-line.
+		 */
+		if (!VARATT_IS_EXTENDED(DatumGetPointer(untoasted_values[i].value)) &&
+			VARSIZE(DatumGetPointer(untoasted_values[i].value)) > TOAST_INDEX_TARGET &&
+			(att->attstorage == TYPSTORAGE_EXTENDED ||
+			 att->attstorage == TYPSTORAGE_MAIN))
+		{
+			Datum		cvalue;
+
+			cvalue = toast_compress_datum(untoasted_values[i].value,
+										  att->attcompression);
+
+			if (DatumGetPointer(cvalue) != NULL)
+			{
+				/* successful compression */
+				if (untoasted_free[i])
+					pfree(DatumGetPointer(untoasted_values[i].value));
+				untoasted_values[i].value = cvalue;
+				untoasted_free[i] = true;
+			}
+		}
+	}
+#endif
+
+	for (i = 0; i < numberOfAttributes; i++)
+	{
+		if (values[i].isnull)
+		{
+			hasnull = true;
+			break;
+		}
+	}
+
+	if (hasnull)
+		infomask |= INDEX_NULL_MASK;
+
+	hoff = IndexInfoFindDataOffset(infomask);
+#ifdef TOAST_INDEX_HACK
+	data_size = heap_compute_data_size_s(tupleDescriptor,
+										 untoasted_values);
+#else
+	data_size = heap_compute_data_size_s(tupleDescriptor,
+										 values, isnull);
+#endif
+	size = hoff + data_size;
+	size = MAXALIGN(size);		/* be conservative */
+
+	tp = (char *) palloc0(size);
+	tuple = (IndexTuple) tp;
+
+	heap_fill_tuple_s(tupleDescriptor,
+#ifdef TOAST_INDEX_HACK
+					  untoasted_values,
+#else
+					  values,
+#endif
+					(char *) tp + hoff,
+					data_size,
+					&tupmask,
+					(hasnull ? (bits8 *) tp + sizeof(IndexTupleData) : NULL));
+
+#ifdef TOAST_INDEX_HACK
+	for (i = 0; i < numberOfAttributes; i++)
+	{
+		if (untoasted_free[i])
+			pfree(DatumGetPointer(untoasted_values[i].value));
+	}
+#endif
+
+	/*
+	 * We do this because heap_fill_tuple wants to initialize a "tupmask"
+	 * which is used for HeapTuples, but we want an indextuple infomask. The
+	 * only relevant info is the "has variable attributes" field. We have
+	 * already set the hasnull bit above.
+	 */
+	if (tupmask & HEAP_HASVARWIDTH)
+		infomask |= INDEX_VAR_MASK;
+
+	/* Also assert we got rid of external attributes */
+#ifdef TOAST_INDEX_HACK
+	Assert((tupmask & HEAP_HASEXTERNAL) == 0);
+#endif
+
+	/*
+	 * Here we make sure that the size will fit in the field reserved for it
+	 * in t_info.
+	 */
+	if ((size & INDEX_SIZE_MASK) != size)
+		ereport(ERROR,
+				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+				 errmsg("index row requires %zu bytes, maximum size is %zu",
+						size, (Size) INDEX_SIZE_MASK)));
+
+	infomask |= size;
+
+	/*
+	 * initialize metadata
+	 */
+	tuple->t_info = infomask;
+	return tuple;
+}
+
 /* ----------------
  *		nocache_index_getattr
  *
@@ -540,6 +694,78 @@ index_deform_tuple_internal(TupleDesc tupleDescriptor,
 	}
 }
 
+void
+index_deform_tuple_s(IndexTuple tup, TupleDesc tupleDescriptor,
+					 NullableDatum *values)
+{
+	int			hasnulls = IndexTupleHasNulls(tup);
+	int			natts = tupleDescriptor->natts; /* number of atts to extract */
+	int			attnum;
+	char	   *tp;				/* ptr to tuple data */
+	int			off;			/* offset in tuple data */
+	bits8	   *bp;				/* ptr to null bitmap in tuple */
+	bool		slow = false;	/* can we use/set attcacheoff? */
+
+	/* Assert to protect callers who allocate fixed-size arrays */
+	Assert(natts <= INDEX_MAX_KEYS);
+
+	/* XXX "knows" t_bits are just after fixed tuple header! */
+	bp = (bits8 *) ((char *) tup + sizeof(IndexTupleData));
+
+	tp = (char *) tup + IndexInfoFindDataOffset(tup->t_info);
+	off = 0;
+
+	for (attnum = 0; attnum < natts; attnum++)
+	{
+		Form_pg_attribute thisatt = TupleDescAttr(tupleDescriptor, attnum);
+
+		if (hasnulls && att_isnull(attnum, bp))
+		{
+			values[attnum] = NULL_DATUM;
+			slow = true;		/* can't use attcacheoff anymore */
+			continue;
+		}
+
+		values[attnum].isnull = false;
+
+		if (!slow && thisatt->attcacheoff >= 0)
+			off = thisatt->attcacheoff;
+		else if (thisatt->attlen == -1)
+		{
+			/*
+			 * We can only cache the offset for a varlena attribute if the
+			 * offset is already suitably aligned, so that there would be no
+			 * pad bytes in any case: then the offset will be valid for either
+			 * an aligned or unaligned value.
+			 */
+			if (!slow &&
+				off == att_align_nominal(off, thisatt->attalign))
+				thisatt->attcacheoff = off;
+			else
+			{
+				off = att_align_pointer(off, thisatt->attalign, -1,
+										tp + off);
+				slow = true;
+			}
+		}
+		else
+		{
+			/* not varlena, so safe to use att_align_nominal */
+			off = att_align_nominal(off, thisatt->attalign);
+
+			if (!slow)
+				thisatt->attcacheoff = off;
+		}
+
+		values[attnum].value = fetchatt(thisatt, tp + off);
+
+		off = att_addlength_pointer(off, thisatt->attlen, tp + off);
+
+		if (thisatt->attlen <= 0)
+			slow = true;		/* can't use attcacheoff anymore */
+	}
+}
+
 /*
  * Create a palloc'd copy of an index tuple.
  */
@@ -577,8 +803,7 @@ index_truncate_tuple(TupleDesc sourceDescriptor, IndexTuple source,
 					 int leavenatts)
 {
 	TupleDesc	truncdesc;
-	Datum		values[INDEX_MAX_KEYS];
-	bool		isnull[INDEX_MAX_KEYS];
+	NullableDatum values[INDEX_MAX_KEYS];
 	IndexTuple	truncated;
 
 	Assert(leavenatts <= sourceDescriptor->natts);
@@ -593,8 +818,8 @@ index_truncate_tuple(TupleDesc sourceDescriptor, IndexTuple source,
 	truncdesc->natts = leavenatts;
 
 	/* Deform, form copy of tuple with fewer attributes */
-	index_deform_tuple(source, truncdesc, values, isnull);
-	truncated = index_form_tuple(truncdesc, values, isnull);
+	index_deform_tuple_s(source, truncdesc, values);
+	truncated = index_form_tuple_s(truncdesc, values);
 	truncated->t_tid = source->t_tid;
 	Assert(IndexTupleSize(truncated) <= IndexTupleSize(source));
 

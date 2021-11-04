@@ -189,7 +189,7 @@ jsonb_subscript_check_subscripts(ExprContext *econtext,
 	 * an empty source.
 	 */
 	if (sbsrefstate->numupper > 0 && sbsrefstate->upperprovided[0] &&
-		!sbsrefstate->upperindexnull[0] && workspace->indexOid[0] == INT4OID)
+		!sbsrefstate->upperindex[0].isnull && workspace->indexOid[0] == INT4OID)
 		workspace->expectArray = true;
 
 	/* Process upper subscripts */
@@ -198,7 +198,7 @@ jsonb_subscript_check_subscripts(ExprContext *econtext,
 		if (sbsrefstate->upperprovided[i])
 		{
 			/* If any index expr yields NULL, result is NULL or error */
-			if (sbsrefstate->upperindexnull[i])
+			if (sbsrefstate->upperindex[i].isnull)
 			{
 				if (sbsrefstate->isassignment)
 					ereport(ERROR,
@@ -214,13 +214,13 @@ jsonb_subscript_check_subscripts(ExprContext *econtext,
 			 */
 			if (workspace->indexOid[i] == INT4OID)
 			{
-				Datum		datum = sbsrefstate->upperindex[i];
+				Datum		datum = sbsrefstate->upperindex[i].value;
 				char	   *cs = DatumGetCString(DirectFunctionCall1(int4out, datum));
 
 				workspace->index[i] = CStringGetTextDatum(cs);
 			}
 			else
-				workspace->index[i] = sbsrefstate->upperindex[i];
+				workspace->index[i] = sbsrefstate->upperindex[i].value;
 		}
 	}
 
@@ -256,7 +256,7 @@ jsonb_subscript_fetch(ExprContext *econtext,
  * Evaluate SubscriptingRef assignment for a jsonb element assignment.
  *
  * Input container (possibly null) is in result area, replacement value is in
- * SubscriptingRefState's replacevalue/replacenull.
+ * SubscriptingRefState's replacevalue.
  */
 static void
 jsonb_subscript_assign(ExprContext *econtext,
@@ -267,10 +267,10 @@ jsonb_subscript_assign(ExprContext *econtext,
 	Jsonb	   *jsonbSource;
 	JsonbValue	replacevalue;
 
-	if (sbsrefstate->replacenull)
+	if (sbsrefstate->replace.isnull)
 		replacevalue.type = jbvNull;
 	else
-		JsonbToJsonbValue(DatumGetJsonbP(sbsrefstate->replacevalue),
+		JsonbToJsonbValue(DatumGetJsonbP(sbsrefstate->replace.value),
 						  &replacevalue);
 
 	/*
@@ -327,18 +327,23 @@ jsonb_subscript_fetch_old(ExprContext *econtext,
 	if (result->isnull)
 	{
 		/* whole jsonb is null, so any element is too */
-		sbsrefstate->prevvalue = (Datum) 0;
-		sbsrefstate->prevnull = true;
+		sbsrefstate->prev.value = (Datum) 0;
+		sbsrefstate->prev.isnull = true;
 	}
 	else
 	{
 		Jsonb	   *jsonbSource = DatumGetJsonbP(result->value);
+		Datum	   *upper = palloc(sizeof(Datum) * sbsrefstate->numupper);
 
-		sbsrefstate->prevvalue = jsonb_get_element(jsonbSource,
-												   sbsrefstate->upperindex,
-												   sbsrefstate->numupper,
-												   &sbsrefstate->prevnull,
-												   false);
+		for (int i = 0; i < sbsrefstate->numupper; i++)
+			upper[i] = sbsrefstate->upperindex[i].value;
+
+		sbsrefstate->prev.value = jsonb_get_element(jsonbSource,
+													upper,
+													sbsrefstate->numupper,
+													&sbsrefstate->prev.isnull,
+													false);
+		pfree(upper);
 	}
 }
 

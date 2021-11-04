@@ -330,9 +330,9 @@ printtup(TupleTableSlot *slot, DestReceiver *self)
 	for (i = 0; i < natts; ++i)
 	{
 		PrinttupAttrInfo *thisState = myState->myinfo + i;
-		Datum		attr = slot->tts_values[i];
+		Datum		attr = slot->tts_values[i].value;
 
-		if (slot->tts_isnull[i])
+		if (slot->tts_values[i].isnull)
 		{
 			pq_sendint32(buf, -1);
 			continue;

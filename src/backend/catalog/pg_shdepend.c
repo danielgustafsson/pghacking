@@ -905,18 +905,18 @@ copyTemplateDependencies(Oid templateDbId, Oid newDbId)
 
 		ExecClearTuple(slot[slot_stored_count]);
 
-		memset(slot[slot_stored_count]->tts_isnull, false,
-			   slot[slot_stored_count]->tts_tupleDescriptor->natts * sizeof(bool));
+		for (int a = 0; a < slot[slot_stored_count]->tts_tupleDescriptor->natts; a++)
+			slot[slot_stored_count]->tts_values[a].isnull = false;
 
 		shdep = (Form_pg_shdepend) GETSTRUCT(tup);
 
-		slot[slot_stored_count]->tts_values[Anum_pg_shdepend_dbid - 1] = ObjectIdGetDatum(newDbId);
-		slot[slot_stored_count]->tts_values[Anum_pg_shdepend_classid - 1] = shdep->classid;
-		slot[slot_stored_count]->tts_values[Anum_pg_shdepend_objid - 1] = shdep->objid;
-		slot[slot_stored_count]->tts_values[Anum_pg_shdepend_objsubid - 1] = shdep->objsubid;
-		slot[slot_stored_count]->tts_values[Anum_pg_shdepend_refclassid - 1] = shdep->refclassid;
-		slot[slot_stored_count]->tts_values[Anum_pg_shdepend_refobjid - 1] = shdep->refobjid;
-		slot[slot_stored_count]->tts_values[Anum_pg_shdepend_deptype - 1] = shdep->deptype;
+		slot[slot_stored_count]->tts_values[Anum_pg_shdepend_dbid - 1].value = ObjectIdGetDatum(newDbId);
+		slot[slot_stored_count]->tts_values[Anum_pg_shdepend_classid - 1].value = shdep->classid;
+		slot[slot_stored_count]->tts_values[Anum_pg_shdepend_objid - 1].value = shdep->objid;
+		slot[slot_stored_count]->tts_values[Anum_pg_shdepend_objsubid - 1].value = shdep->objsubid;
+		slot[slot_stored_count]->tts_values[Anum_pg_shdepend_refclassid - 1].value = shdep->refclassid;
+		slot[slot_stored_count]->tts_values[Anum_pg_shdepend_refobjid - 1].value = shdep->refobjid;
+		slot[slot_stored_count]->tts_values[Anum_pg_shdepend_deptype - 1].value = shdep->deptype;
 
 		ExecStoreVirtualTuple(slot[slot_stored_count]);
 		slot_stored_count++;

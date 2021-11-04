@@ -561,14 +561,13 @@ toast_flatten_tuple_to_datum(HeapTupleHeader tup,
  */
 HeapTuple
 toast_build_flattened_tuple(TupleDesc tupleDesc,
-							Datum *values,
-							bool *isnull)
+							NullableDatum *values)
 {
 	HeapTuple	new_tuple;
 	int			numAttrs = tupleDesc->natts;
 	int			num_to_free;
 	int			i;
-	Datum		new_values[MaxTupleAttributeNumber];
+	NullableDatum new_values[MaxTupleAttributeNumber];
 	Pointer		freeable_values[MaxTupleAttributeNumber];
 
 	/*
@@ -576,7 +575,7 @@ toast_build_flattened_tuple(TupleDesc tupleDesc,
 	 * we potentially need to modify the values array.
 	 */
 	Assert(numAttrs <= MaxTupleAttributeNumber);
-	memcpy(new_values, values, numAttrs * sizeof(Datum));
+	memcpy(new_values, values, numAttrs * sizeof(NullableDatum));
 
 	num_to_free = 0;
 	for (i = 0; i < numAttrs; i++)
@@ -584,15 +583,15 @@ toast_build_flattened_tuple(TupleDesc tupleDesc,
 		/*
 		 * Look at non-null varlena attributes
 		 */
-		if (!isnull[i] && TupleDescAttr(tupleDesc, i)->attlen == -1)
+		if (!values[i].isnull && TupleDescAttr(tupleDesc, i)->attlen == -1)
 		{
 			struct varlena *new_value;
 
-			new_value = (struct varlena *) DatumGetPointer(new_values[i]);
+			new_value = (struct varlena *) DatumGetPointer(new_values[i].value);
 			if (VARATT_IS_EXTERNAL(new_value))
 			{
 				new_value = detoast_external_attr(new_value);
-				new_values[i] = PointerGetDatum(new_value);
+				new_values[i].value = PointerGetDatum(new_value);
 				freeable_values[num_to_free++] = (Pointer) new_value;
 			}
 		}
@@ -601,7 +600,7 @@ toast_build_flattened_tuple(TupleDesc tupleDesc,
 	/*
 	 * Form the reconfigured tuple.
 	 */
-	new_tuple = heap_form_tuple(tupleDesc, new_values, isnull);
+	new_tuple = heap_form_tuple_s(tupleDesc, new_values);
 
 	/*
 	 * Free allocated temp values

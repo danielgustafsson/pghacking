@@ -751,7 +751,7 @@ fileIterateForeignScan(ForeignScanState *node)
 	 */
 	oldcontext = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
 	found = NextCopyFrom(festate->cstate, econtext,
-						 slot->tts_values, slot->tts_isnull);
+						 slot->tts_values);
 	if (found)
 		ExecStoreVirtualTuple(slot);
 
@@ -1128,8 +1128,7 @@ file_acquire_sample_rows(Relation onerel, int elevel,
 	double		rowstoskip = -1;	/* -1 means not set yet */
 	ReservoirStateData rstate;
 	TupleDesc	tupDesc;
-	Datum	   *values;
-	bool	   *nulls;
+	NullableDatum *values;
 	bool		found;
 	char	   *filename;
 	bool		is_program;
@@ -1143,8 +1142,7 @@ file_acquire_sample_rows(Relation onerel, int elevel,
 	Assert(targrows > 0);
 
 	tupDesc = RelationGetDescr(onerel);
-	values = (Datum *) palloc(tupDesc->natts * sizeof(Datum));
-	nulls = (bool *) palloc(tupDesc->natts * sizeof(bool));
+	values = (NullableDatum *) palloc(tupDesc->natts * sizeof(NullableDatum));
 
 	/* Fetch options of foreign table */
 	fileGetOptions(RelationGetRelid(onerel), &filename, &is_program, &options);
@@ -1183,7 +1181,7 @@ file_acquire_sample_rows(Relation onerel, int elevel,
 		MemoryContextReset(tupcontext);
 		MemoryContextSwitchTo(tupcontext);
 
-		found = NextCopyFrom(cstate, NULL, values, nulls);
+		found = NextCopyFrom(cstate, NULL, values);
 
 		MemoryContextSwitchTo(oldcontext);
 
@@ -1198,7 +1196,7 @@ file_acquire_sample_rows(Relation onerel, int elevel,
 		 */
 		if (numrows < targrows)
 		{
-			rows[numrows++] = heap_form_tuple(tupDesc, values, nulls);
+			rows[numrows++] = heap_form_tuple_s(tupDesc, values);
 		}
 		else
 		{
@@ -1220,7 +1218,7 @@ file_acquire_sample_rows(Relation onerel, int elevel,
 
 				Assert(k >= 0 && k < targrows);
 				heap_freetuple(rows[k]);
-				rows[k] = heap_form_tuple(tupDesc, values, nulls);
+				rows[k] = heap_form_tuple_s(tupDesc, values);
 			}
 
 			rowstoskip -= 1;
@@ -1238,7 +1236,6 @@ file_acquire_sample_rows(Relation onerel, int elevel,
 	EndCopyFrom(cstate);
 
 	pfree(values);
-	pfree(nulls);
 
 	/*
 	 * Emit some interesting relation info

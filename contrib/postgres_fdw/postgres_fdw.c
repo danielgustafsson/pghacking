@@ -4740,10 +4740,8 @@ apply_returning_filter(PgFdwDirectModifyState *dmstate,
 {
 	TupleDesc	resultTupType = RelationGetDescr(dmstate->resultRel);
 	TupleTableSlot *resultSlot;
-	Datum	   *values;
-	bool	   *isnull;
-	Datum	   *old_values;
-	bool	   *old_isnull;
+	NullableDatum *values;
+	NullableDatum *old_values;
 	int			i;
 
 	/*
@@ -4756,14 +4754,12 @@ apply_returning_filter(PgFdwDirectModifyState *dmstate,
 	 */
 	slot_getallattrs(slot);
 	old_values = slot->tts_values;
-	old_isnull = slot->tts_isnull;
 
 	/*
 	 * Prepare to build the result tuple.
 	 */
 	ExecClearTuple(resultSlot);
 	values = resultSlot->tts_values;
-	isnull = resultSlot->tts_isnull;
 
 	/*
 	 * Transpose data into proper fields of the result tuple.
@@ -4773,15 +4769,9 @@ apply_returning_filter(PgFdwDirectModifyState *dmstate,
 		int			j = dmstate->attnoMap[i];
 
 		if (j == 0)
-		{
-			values[i] = (Datum) 0;
-			isnull[i] = true;
-		}
+			values[i] = NULL_DATUM;
 		else
-		{
 			values[i] = old_values[j - 1];
-			isnull[i] = old_isnull[j - 1];
-		}
 	}
 
 	/*
@@ -4803,7 +4793,7 @@ apply_returning_filter(PgFdwDirectModifyState *dmstate,
 		{
 			ItemPointer ctid = NULL;
 
-			ctid = (ItemPointer) DatumGetPointer(old_values[dmstate->ctidAttno - 1]);
+			ctid = (ItemPointer) DatumGetPointer(old_values[dmstate->ctidAttno - 1].value);
 			resultTup->t_self = *ctid;
 		}
 

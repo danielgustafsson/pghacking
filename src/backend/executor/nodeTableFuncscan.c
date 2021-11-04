@@ -436,8 +436,7 @@ tfuncLoadRows(TableFuncScanState *tstate, ExprContext *econtext)
 	const TableFuncRoutine *routine = tstate->routine;
 	TupleTableSlot *slot = tstate->ss.ss_ScanTupleSlot;
 	TupleDesc	tupdesc = slot->tts_tupleDescriptor;
-	Datum	   *values = slot->tts_values;
-	bool	   *nulls = slot->tts_isnull;
+	NullableDatum *values = slot->tts_values;
 	int			natts = tupdesc->natts;
 	MemoryContext oldcxt;
 	int			ordinalitycol;
@@ -476,18 +475,19 @@ tfuncLoadRows(TableFuncScanState *tstate, ExprContext *econtext)
 			if (colno == ordinalitycol)
 			{
 				/* Fast path for ordinality column */
-				values[colno] = Int32GetDatum(tstate->ordinal++);
-				nulls[colno] = false;
+				values[colno].value = Int32GetDatum(tstate->ordinal++);
+				values[colno].isnull = false;
 			}
 			else
 			{
 				bool		isnull;
 
-				values[colno] = routine->GetValue(tstate,
-												  colno,
-												  att->atttypid,
-												  att->atttypmod,
-												  &isnull);
+				values[colno].value =
+					routine->GetValue(tstate,
+									  colno,
+									  att->atttypid,
+									  att->atttypmod,
+									  &isnull);
 
 				/* No value?  Evaluate and apply the default, if any */
 				if (isnull && cell != NULL)
@@ -495,8 +495,8 @@ tfuncLoadRows(TableFuncScanState *tstate, ExprContext *econtext)
 					ExprState  *coldefexpr = (ExprState *) lfirst(cell);
 
 					if (coldefexpr != NULL)
-						values[colno] = ExecEvalExpr(coldefexpr, econtext,
-													 &isnull);
+						values[colno].value = ExecEvalExpr(coldefexpr, econtext,
+														   &isnull);
 				}
 
 				/* Verify a possible NOT NULL constraint */
@@ -506,7 +506,7 @@ tfuncLoadRows(TableFuncScanState *tstate, ExprContext *econtext)
 							 errmsg("null is not allowed in column \"%s\"",
 									NameStr(att->attname))));
 
-				nulls[colno] = isnull;
+				values[colno].isnull = isnull;
 			}
 
 			/* advance list of default expressions */
@@ -514,7 +514,7 @@ tfuncLoadRows(TableFuncScanState *tstate, ExprContext *econtext)
 				cell = lnext(tstate->coldefexprs, cell);
 		}
 
-		tuplestore_putvalues(tstate->tupstore, tupdesc, values, nulls);
+		tuplestore_putvalues_s(tstate->tupstore, tupdesc, values);
 
 		MemoryContextReset(econtext->ecxt_per_tuple_memory);
 	}

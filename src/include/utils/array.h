@@ -378,9 +378,9 @@ extern ArrayType *array_set(ArrayType *array, int nSubscripts, int *indx,
 							int arraytyplen, int elmlen, bool elmbyval, char elmalign);
 
 extern bool array_map_unpack(Datum arrayd, ArrayMapState *amstate,
-							 Datum *res, bool *resnull);
+							 NullableDatum *result);
 extern bool array_map_pack(Oid retType, ArrayMapState *amstate,
-						   Datum *res, bool *resnull);
+						   NullableDatum *result);
 
 extern void array_bitmap_copy(bits8 *destbitmap, int destoffset,
 							  const bits8 *srcbitmap, int srcoffset,

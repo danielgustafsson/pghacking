@@ -84,21 +84,19 @@ typedef struct ExprState
 	 * Storage for result value of a scalar expression, or for individual
 	 * column results within expressions built by ExecBuildProjectionInfo().
 	 */
-#define FIELDNO_EXPRSTATE_RESNULL 2
-	bool		resnull;
-#define FIELDNO_EXPRSTATE_RESVALUE 3
-	Datum		resvalue;
+#define FIELDNO_EXPRSTATE_RESULT 2
+	NullableDatum result;
 
 	/*
 	 * If projecting a tuple result, this slot holds the result; else NULL.
 	 */
-#define FIELDNO_EXPRSTATE_RESULTSLOT 4
+#define FIELDNO_EXPRSTATE_RESULTSLOT 3
 	TupleTableSlot *resultslot;
 
 	/*
 	 * Instructions to compute expression's return value.
 	 */
-#define FIELDNO_EXPRSTATE_STEPS 5
+#define FIELDNO_EXPRSTATE_STEPS 4
 	struct ExprEvalStep *steps;
 
 	/*
@@ -121,15 +119,13 @@ typedef struct ExprState
 	int			steps_len;		/* number of steps currently */
 	int			steps_alloc;	/* allocated length of steps array */
 
-#define FIELDNO_EXPRSTATE_PARENT 11
+#define FIELDNO_EXPRSTATE_PARENT 10
 	struct PlanState *parent;	/* parent PlanState node, if any */
 	ParamListInfo ext_params;	/* for compiling PARAM_EXTERN nodes */
 
-	Datum	   *innermost_caseval;
-	bool	   *innermost_casenull;
+	NullableDatum *innermost_caseval;
 
-	Datum	   *innermost_domainval;
-	bool	   *innermost_domainnull;
+	NullableDatum *innermost_domainval;
 } ExprState;
 
 
@@ -266,21 +262,15 @@ typedef struct ExprContext
 	 * node, or for WindowFunc nodes within a WindowAgg node.
 	 */
 #define FIELDNO_EXPRCONTEXT_AGGVALUES 8
-	Datum	   *ecxt_aggvalues; /* precomputed values for aggs/windowfuncs */
-#define FIELDNO_EXPRCONTEXT_AGGNULLS 9
-	bool	   *ecxt_aggnulls;	/* null flags for aggs/windowfuncs */
+	NullableDatum *ecxt_aggvalues; /* precomputed values for aggs/windowfuncs */
 
 	/* Value to substitute for CaseTestExpr nodes in expression */
-#define FIELDNO_EXPRCONTEXT_CASEDATUM 10
-	Datum		caseValue_datum;
-#define FIELDNO_EXPRCONTEXT_CASENULL 11
-	bool		caseValue_isNull;
+#define FIELDNO_EXPRCONTEXT_CASEVALUE 9
+	NullableDatum caseValue;
 
 	/* Value to substitute for CoerceToDomainValue nodes in expression */
-#define FIELDNO_EXPRCONTEXT_DOMAINDATUM 12
-	Datum		domainValue_datum;
-#define FIELDNO_EXPRCONTEXT_DOMAINNULL 13
-	bool		domainValue_isNull;
+#define FIELDNO_EXPRCONTEXT_DOMAINVALUE 10
+	NullableDatum domainValue;
 
 	/* Link to containing EState (NULL if a standalone ExprContext) */
 	struct EState *ecxt_estate;
@@ -2361,11 +2351,11 @@ typedef struct SharedAggInfo
  *
  *	ss.ss_ScanTupleSlot refers to output of underlying plan.
  *
- *	Note: ss.ps.ps_ExprContext contains ecxt_aggvalues and
- *	ecxt_aggnulls arrays, which hold the computed agg values for the current
- *	input group during evaluation of an Agg node's output tuple(s).  We
- *	create a second ExprContext, tmpcontext, in which to evaluate input
- *	expressions and run the aggregate transition functions.
+ *	Note: ss.ps.ps_ExprContext contains the ecxt_aggvalues array, which hold
+ *	the computed agg values for the current input group during evaluation of
+ *	an Agg node's output tuple(s).  We create a second ExprContext,
+ *	tmpcontext, in which to evaluate input expressions and run the aggregate
+ *	transition functions.
  * ---------------------
  */
 /* these structs are private in nodeAgg.c: */

@@ -6067,13 +6067,11 @@ ATRewriteTable(AlteredTableInfo *tab, Oid OIDNewHeap, LOCKMODE lockmode)
 
 				/* copy attributes */
 				memcpy(newslot->tts_values, oldslot->tts_values,
-					   sizeof(Datum) * oldslot->tts_nvalid);
-				memcpy(newslot->tts_isnull, oldslot->tts_isnull,
-					   sizeof(bool) * oldslot->tts_nvalid);
+					   sizeof(NullableDatum) * oldslot->tts_nvalid);
 
 				/* Set dropped attributes to null in new tuple */
 				foreach(lc, dropped_attrs)
-					newslot->tts_isnull[lfirst_int(lc)] = true;
+					newslot->tts_values[lfirst_int(lc)].isnull = true;
 
 				/*
 				 * Constraints and GENERATED expressions might reference the
@@ -6094,14 +6092,15 @@ ATRewriteTable(AlteredTableInfo *tab, Oid OIDNewHeap, LOCKMODE lockmode)
 				foreach(l, tab->newvals)
 				{
 					NewColumnValue *ex = lfirst(l);
+					NullableDatum *value = &newslot->tts_values[ex->attnum - 1];
 
 					if (ex->is_generated)
 						continue;
 
-					newslot->tts_values[ex->attnum - 1]
+					value->value
 						= ExecEvalExpr(ex->exprstate,
 									   econtext,
-									   &newslot->tts_isnull[ex->attnum - 1]);
+									   &value->isnull);
 				}
 
 				ExecStoreVirtualTuple(newslot);
@@ -6116,14 +6115,15 @@ ATRewriteTable(AlteredTableInfo *tab, Oid OIDNewHeap, LOCKMODE lockmode)
 				foreach(l, tab->newvals)
 				{
 					NewColumnValue *ex = lfirst(l);
+					NullableDatum *value = &newslot->tts_values[ex->attnum - 1];
 
 					if (!ex->is_generated)
 						continue;
 
-					newslot->tts_values[ex->attnum - 1]
+					value->value
 						= ExecEvalExpr(ex->exprstate,
 									   econtext,
-									   &newslot->tts_isnull[ex->attnum - 1]);
+									   &value->isnull);
 				}
 
 				insertslot = newslot;

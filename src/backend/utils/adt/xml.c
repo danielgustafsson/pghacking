@@ -802,9 +802,7 @@ xmltotext_with_options(xmltype *data, XmlOptionType xmloption_arg, bool indent)
 
 
 xmltype *
-xmlelement(XmlExpr *xexpr,
-		   Datum *named_argvalue, bool *named_argnull,
-		   Datum *argvalue, bool *argnull)
+xmlelement(XmlExpr *xexpr, NullableDatum *named_args, NullableDatum *args)
 {
 #ifdef USE_LIBXML
 	xmltype    *result;
@@ -831,10 +829,10 @@ xmlelement(XmlExpr *xexpr,
 		Expr	   *e = (Expr *) lfirst(arg);
 		char	   *str;
 
-		if (named_argnull[i])
+		if (named_args[i].isnull)
 			str = NULL;
 		else
-			str = map_sql_value_to_xml_value(named_argvalue[i],
+			str = map_sql_value_to_xml_value(named_args[i].value,
 											 exprType((Node *) e),
 											 false);
 		named_arg_strings = lappend(named_arg_strings, str);
@@ -849,9 +847,9 @@ xmlelement(XmlExpr *xexpr,
 		char	   *str;
 
 		/* here we can just forget NULL elements immediately */
-		if (!argnull[i])
+		if (!args[i].isnull)
 		{
-			str = map_sql_value_to_xml_value(argvalue[i],
+			str = map_sql_value_to_xml_value(args[i].value,
 											 exprType((Node *) e),
 											 true);
 			arg_strings = lappend(arg_strings, str);

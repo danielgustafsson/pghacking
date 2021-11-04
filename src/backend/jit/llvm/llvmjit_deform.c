@@ -59,7 +59,6 @@ slot_compile_deform(LLVMJitContext *context, TupleDesc desc,
 
 	LLVMValueRef v_tupdata_base;
 	LLVMValueRef v_tts_values;
-	LLVMValueRef v_tts_nulls;
 	LLVMValueRef v_slotoffp;
 	LLVMValueRef v_flagsp;
 	LLVMValueRef v_nvalidp;
@@ -173,9 +172,6 @@ slot_compile_deform(LLVMJitContext *context, TupleDesc desc,
 	v_tts_values =
 		l_load_struct_gep(b, v_slot, FIELDNO_TUPLETABLESLOT_VALUES,
 						  "tts_values");
-	v_tts_nulls =
-		l_load_struct_gep(b, v_slot, FIELDNO_TUPLETABLESLOT_ISNULL,
-						  "tts_ISNULL");
 	v_flagsp = LLVMBuildStructGEP(b, v_slot, FIELDNO_TUPLETABLESLOT_FLAGS, "");
 	v_nvalidp = LLVMBuildStructGEP(b, v_slot, FIELDNO_TUPLETABLESLOT_NVALID, "");
 
@@ -378,6 +374,8 @@ slot_compile_deform(LLVMJitContext *context, TupleDesc desc,
 		LLVMValueRef l_attno = l_int16_const(attnum);
 		LLVMValueRef v_attdatap;
 		LLVMValueRef v_resultp;
+		LLVMValueRef v_result_isnullp;
+		LLVMValueRef v_result_valuep;
 
 		/* build block checking whether we did all the necessary attributes */
 		LLVMPositionBuilderAtEnd(b, attcheckattnoblocks[attnum]);
@@ -452,14 +450,18 @@ slot_compile_deform(LLVMJitContext *context, TupleDesc desc,
 
 			LLVMPositionBuilderAtEnd(b, b_ifnull);
 
+			v_resultp = LLVMBuildGEP(b, v_tts_values, &l_attno, 1, "");
+			v_result_isnullp = LLVMBuildStructGEP(b, v_resultp,
+												  FIELDNO_NULLABLE_DATUM_ISNULL,
+												  "");
+			v_result_valuep = LLVMBuildStructGEP(b, v_resultp,
+												 FIELDNO_NULLABLE_DATUM_DATUM,
+												 "");
+
 			/* store null-byte */
-			LLVMBuildStore(b,
-						   l_int8_const(1),
-						   LLVMBuildGEP(b, v_tts_nulls, &l_attno, 1, ""));
+			LLVMBuildStore(b, l_int8_const(1), v_result_isnullp);
 			/* store zero datum */
-			LLVMBuildStore(b,
-						   l_sizet_const(0),
-						   LLVMBuildGEP(b, v_tts_values, &l_attno, 1, ""));
+			LLVMBuildStore(b, l_sizet_const(0), v_result_valuep);
 
 			LLVMBuildBr(b, b_next);
 			attguaranteedalign = false;
@@ -637,10 +639,15 @@ slot_compile_deform(LLVMJitContext *context, TupleDesc desc,
 
 		/* compute address to store value at */
 		v_resultp = LLVMBuildGEP(b, v_tts_values, &l_attno, 1, "");
+		v_result_isnullp = LLVMBuildStructGEP(b, v_resultp,
+											  FIELDNO_NULLABLE_DATUM_ISNULL,
+											  "");
+		v_result_valuep = LLVMBuildStructGEP(b, v_resultp,
+											 FIELDNO_NULLABLE_DATUM_DATUM,
+											 "");
 
 		/* store null-byte (false) */
-		LLVMBuildStore(b, l_int8_const(0),
-					   LLVMBuildGEP(b, v_tts_nulls, &l_attno, 1, ""));
+		LLVMBuildStore(b, l_int8_const(0), v_result_isnullp);
 
 		/*
 		 * Store datum. For byval: datums copy the value, extend to Datum's
@@ -657,7 +664,7 @@ slot_compile_deform(LLVMJitContext *context, TupleDesc desc,
 			v_tmp_loaddata = LLVMBuildLoad(b, v_tmp_loaddata, "attr_byval");
 			v_tmp_loaddata = LLVMBuildZExt(b, v_tmp_loaddata, TypeSizeT, "");
 
-			LLVMBuildStore(b, v_tmp_loaddata, v_resultp);
+			LLVMBuildStore(b, v_tmp_loaddata, v_result_valuep);
 		}
 		else
 		{
@@ -669,7 +676,7 @@ slot_compile_deform(LLVMJitContext *context, TupleDesc desc,
 								  v_attdatap,
 								  TypeSizeT,
 								  "attr_ptr");
-			LLVMBuildStore(b, v_tmp_loaddata, v_resultp);
+			LLVMBuildStore(b, v_tmp_loaddata, v_result_valuep);
 		}
 
 		/* increment data pointer */

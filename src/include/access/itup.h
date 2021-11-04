@@ -86,6 +86,8 @@ extern void index_deform_tuple(IndexTuple tup, TupleDesc tupleDescriptor,
 extern void index_deform_tuple_internal(TupleDesc tupleDescriptor,
 										Datum *values, bool *isnull,
 										char *tp, bits8 *bp, int hasnulls);
+extern void index_deform_tuple_s(IndexTuple tup, TupleDesc tupleDescriptor,
+								 NullableDatum *values);
 extern IndexTuple CopyIndexTuple(IndexTuple source);
 extern IndexTuple index_truncate_tuple(TupleDesc sourceDescriptor,
 									   IndexTuple source, int leavenatts);

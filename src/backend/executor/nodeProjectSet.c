@@ -154,8 +154,7 @@ ExecProjectSRF(ProjectSetState *node, bool continuing)
 	{
 		Node	   *elem = node->elems[argno];
 		ExprDoneCond *isdone = &node->elemdone[argno];
-		Datum	   *result = &resultSlot->tts_values[argno];
-		bool	   *isnull = &resultSlot->tts_isnull[argno];
+		NullableDatum *result = &resultSlot->tts_values[argno];
 
 		if (continuing && *isdone == ExprEndResult)
 		{
@@ -163,8 +162,7 @@ ExecProjectSRF(ProjectSetState *node, bool continuing)
 			 * If we're continuing to project output rows from a source tuple,
 			 * return NULLs once the SRF has been exhausted.
 			 */
-			*result = (Datum) 0;
-			*isnull = true;
+			*result = NULL_DATUM;
 			hassrf = true;
 		}
 		else if (IsA(elem, SetExprState))
@@ -172,9 +170,9 @@ ExecProjectSRF(ProjectSetState *node, bool continuing)
 			/*
 			 * Evaluate SRF - possibly continuing previously started output.
 			 */
-			*result = ExecMakeFunctionResultSet((SetExprState *) elem,
-												econtext, node->argcontext,
-												isnull, isdone);
+			result->value = ExecMakeFunctionResultSet((SetExprState *) elem,
+													  econtext, node->argcontext,
+													  &result->isnull, isdone);
 
 			if (*isdone != ExprEndResult)
 				hasresult = true;
@@ -185,7 +183,8 @@ ExecProjectSRF(ProjectSetState *node, bool continuing)
 		else
 		{
 			/* Non-SRF tlist expression, just evaluate normally. */
-			*result = ExecEvalExpr((ExprState *) elem, econtext, isnull);
+			result->value = ExecEvalExpr((ExprState *) elem, econtext,
+										 &result->isnull);
 			*isdone = ExprSingleResult;
 		}
 	}

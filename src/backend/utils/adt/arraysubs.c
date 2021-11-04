@@ -189,7 +189,7 @@ array_subscript_check_subscripts(struct ExprContext *econtext,
 		if (sbsrefstate->upperprovided[i])
 		{
 			/* If any index expr yields NULL, result is NULL or error */
-			if (sbsrefstate->upperindexnull[i])
+			if (sbsrefstate->upperindex[i].isnull)
 			{
 				if (sbsrefstate->isassignment)
 					ereport(ERROR,
@@ -198,7 +198,7 @@ array_subscript_check_subscripts(struct ExprContext *econtext,
 				result->isnull = true;
 				return false;
 			}
-			workspace->upperindex[i] = DatumGetInt32(sbsrefstate->upperindex[i]);
+			workspace->upperindex[i] = DatumGetInt32(sbsrefstate->upperindex[i].value);
 		}
 	}
 
@@ -208,7 +208,7 @@ array_subscript_check_subscripts(struct ExprContext *econtext,
 		if (sbsrefstate->lowerprovided[i])
 		{
 			/* If any index expr yields NULL, result is NULL or error */
-			if (sbsrefstate->lowerindexnull[i])
+			if (sbsrefstate->lowerindex[i].isnull)
 			{
 				if (sbsrefstate->isassignment)
 					ereport(ERROR,
@@ -217,7 +217,7 @@ array_subscript_check_subscripts(struct ExprContext *econtext,
 				result->isnull = true;
 				return false;
 			}
-			workspace->lowerindex[i] = DatumGetInt32(sbsrefstate->lowerindex[i]);
+			workspace->lowerindex[i] = DatumGetInt32(sbsrefstate->lowerindex[i].value);
 		}
 	}
 
@@ -302,7 +302,7 @@ array_subscript_assign(struct ExprContext *econtext,
 	 */
 	if (workspace->refattrlength > 0)
 	{
-		if (result->isnull || sbsrefstate->replacenull)
+		if (result->isnull || sbsrefstate->replace.isnull)
 			return;
 	}
 
@@ -321,8 +321,8 @@ array_subscript_assign(struct ExprContext *econtext,
 	result->value = array_set_element(arraySource,
 									  sbsrefstate->numupper,
 									  workspace->upperindex,
-									  sbsrefstate->replacevalue,
-									  sbsrefstate->replacenull,
+									  sbsrefstate->replace.value,
+									  sbsrefstate->replace.isnull,
 									  workspace->refattrlength,
 									  workspace->refelemlength,
 									  workspace->refelembyval,
@@ -351,7 +351,7 @@ array_subscript_assign_slice(struct ExprContext *econtext,
 	 */
 	if (workspace->refattrlength > 0)
 	{
-		if (result->isnull || sbsrefstate->replacenull)
+		if (result->isnull || sbsrefstate->replace.isnull)
 			return;
 	}
 
@@ -373,8 +373,8 @@ array_subscript_assign_slice(struct ExprContext *econtext,
 									workspace->lowerindex,
 									sbsrefstate->upperprovided,
 									sbsrefstate->lowerprovided,
-									sbsrefstate->replacevalue,
-									sbsrefstate->replacenull,
+									sbsrefstate->replace.value,
+									sbsrefstate->replace.isnull,
 									workspace->refattrlength,
 									workspace->refelemlength,
 									workspace->refelembyval,
@@ -400,18 +400,18 @@ array_subscript_fetch_old(struct ExprContext *econtext,
 	if (result->isnull)
 	{
 		/* whole array is null, so any element is too */
-		sbsrefstate->prevvalue = (Datum) 0;
-		sbsrefstate->prevnull = true;
+		sbsrefstate->prev.value = (Datum) 0;
+		sbsrefstate->prev.isnull = true;
 	}
 	else
-		sbsrefstate->prevvalue = array_get_element(result->value,
-												   sbsrefstate->numupper,
-												   workspace->upperindex,
-												   workspace->refattrlength,
-												   workspace->refelemlength,
-												   workspace->refelembyval,
-												   workspace->refelemalign,
-												   &sbsrefstate->prevnull);
+		sbsrefstate->prev.value = array_get_element(result->value,
+													sbsrefstate->numupper,
+													workspace->upperindex,
+													workspace->refattrlength,
+													workspace->refelemlength,
+													workspace->refelembyval,
+													workspace->refelemalign,
+													&sbsrefstate->prev.isnull);
 }
 
 /*
@@ -439,23 +439,23 @@ array_subscript_fetch_old_slice(struct ExprContext *econtext,
 	if (result->isnull)
 	{
 		/* whole array is null, so any slice is too */
-		sbsrefstate->prevvalue = (Datum) 0;
-		sbsrefstate->prevnull = true;
+		sbsrefstate->prev.value = (Datum) 0;
+		sbsrefstate->prev.isnull = true;
 	}
 	else
 	{
-		sbsrefstate->prevvalue = array_get_slice(result->value,
-												 sbsrefstate->numupper,
-												 workspace->upperindex,
-												 workspace->lowerindex,
-												 sbsrefstate->upperprovided,
-												 sbsrefstate->lowerprovided,
-												 workspace->refattrlength,
-												 workspace->refelemlength,
-												 workspace->refelembyval,
-												 workspace->refelemalign);
+		sbsrefstate->prev.value = array_get_slice(result->value,
+												  sbsrefstate->numupper,
+												  workspace->upperindex,
+												  workspace->lowerindex,
+												  sbsrefstate->upperprovided,
+												  sbsrefstate->lowerprovided,
+												  workspace->refattrlength,
+												  workspace->refelemlength,
+												  workspace->refelembyval,
+												  workspace->refelemalign);
 		/* slices of non-null arrays are never null */
-		sbsrefstate->prevnull = false;
+		sbsrefstate->prev.isnull = false;
 	}
 }
 
