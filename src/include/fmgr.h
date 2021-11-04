@@ -86,13 +86,16 @@ typedef struct FmgrInfo
  */
 typedef struct FunctionCallInfoBaseData
 {
+#define FIELDNO_FUNCTIONCALLINFODATA_FLINFO 0
 	FmgrInfo   *flinfo;			/* ptr to lookup info used for this call */
 #define FIELDNO_FUNCTIONCALLINFODATA_CONTEXT 1
 	fmNodePtr	context;		/* pass info about context of call */
 	fmNodePtr	resultinfo;		/* pass or return extra info about result */
+#define FIELDNO_FUNCTIONCALLINFODATA_FNCOLLATION 3
 	Oid			fncollation;	/* collation for function to use */
 #define FIELDNO_FUNCTIONCALLINFODATA_ISNULL 4
 	bool		isnull;			/* function must set true if result is NULL */
+#define FIELDNO_FUNCTIONCALLINFODATA_NARGS 5
 	short		nargs;			/* # arguments actually passed */
 #define FIELDNO_FUNCTIONCALLINFODATA_ARGS 6
 	NullableDatum args[FLEXIBLE_ARRAY_MEMBER];

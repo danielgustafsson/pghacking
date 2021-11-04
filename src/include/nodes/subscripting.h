@@ -159,10 +159,16 @@ typedef void (*SubscriptExecSetup) (const SubscriptingRef *sbsref,
 
 typedef void (*ExecEvalSubscriptCallback)(struct ExprContext *econtext,
 										  struct SubscriptingRefState *sbsrefstate,
+										  NullableDatum *lowerindex,
+										  NullableDatum *upperindex,
+										  NullableDatum *replace,
+										  NullableDatum *prev,
 										  NullableDatum *result);
 
 typedef bool (*ExecEvalSubscriptCheckCallback)(struct ExprContext *econtext,
 											   struct SubscriptingRefState *sbsrefstate,
+											   NullableDatum *lowerindex,
+											   NullableDatum *upperindex,
 											   NullableDatum *result);
 
 /* Execution step methods used for SubscriptingRef */

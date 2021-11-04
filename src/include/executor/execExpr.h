@@ -268,6 +268,31 @@ typedef enum ExprEvalOp
 	EEOP_LAST
 } ExprEvalOp;
 
+typedef struct ExprRelPtr
+{
+	uint32 off;
+	uint32 allocno;
+} ExprRelPtr;
+
+typedef struct RelBool
+{
+	ExprRelPtr ptr;
+} RelBool;
+
+typedef struct RelNullableDatum
+{
+	ExprRelPtr ptr;
+} RelNullableDatum;
+
+typedef struct RelNullableDatumArrayh
+{
+	ExprRelPtr ptr;
+} RelNullableDatumArray;
+
+typedef struct RelFunctionCallInfo
+{
+	ExprRelPtr ptr;
+} RelFunctionCallInfo;
 
 typedef struct ExprEvalStep
 {
@@ -279,7 +304,7 @@ typedef struct ExprEvalStep
 	intptr_t	opcode;
 
 	/* where to store the result of this step */
-	NullableDatum *result;
+	RelNullableDatum result;
 
 	/*
 	 * Inline data for the operation.  Inline data is faster to access, but
@@ -349,7 +374,7 @@ typedef struct ExprEvalStep
 		struct
 		{
 			bool		fn_strict; /* function is strict */
-			FunctionCallInfo fcinfo_data;	/* arguments etc */
+			RelFunctionCallInfo fcinfo_data;	/* arguments etc */
 			/* faster to access without additional indirection: */
 			PGFunction	fn_addr;	/* actual call address */
 			int			nargs;	/* number of arguments */
@@ -358,7 +383,7 @@ typedef struct ExprEvalStep
 		/* for EEOP_BOOL_*_STEP */
 		struct
 		{
-			bool	   *anynull;	/* track if any input was NULL */
+			RelBool anynull;	/* track if any input was NULL */
 			int			jumpdone;	/* jump here if result determined */
 		}			boolexpr;
 
@@ -402,24 +427,24 @@ typedef struct ExprEvalStep
 		/* for EEOP_CASE_TESTVAL/DOMAIN_TESTVAL */
 		struct
 		{
-			NullableDatum *value;	/* value to return */
+			RelNullableDatum value;	/* value to return */
 		}			casetest;
 
 		/* for EEOP_MAKE_READONLY */
 		struct
 		{
-			NullableDatum *value;	/* value to coerce to read-only */
+			RelNullableDatum value;	/* value to coerce to read-only */
 		}			make_readonly;
 
 		/* for EEOP_IOCOERCE */
 		struct
 		{
 			/* lookup and call info for source type's output function */
-			FunctionCallInfo fcinfo_data_out;
+			RelFunctionCallInfo fcinfo_data_out;
 			PGFunction	fn_addr_out;	/* actual call address */
 			/* lookup and call info for result type's input function */
 			bool		fn_strict_in; /* in function is strict */
-			FunctionCallInfo fcinfo_data_in;
+			RelFunctionCallInfo fcinfo_data_in;
 			PGFunction	fn_addr_in;	/* actual call address */
 		}			iocoerce;
 
@@ -439,7 +464,7 @@ typedef struct ExprEvalStep
 		/* for EEOP_ARRAYEXPR */
 		struct
 		{
-			NullableDatum *elements; /* element values get stored here */
+			RelNullableDatumArray elements; /* element values get stored here */
 			int			nelems; /* length of the above arrays */
 			Oid			elemtype;	/* array element type */
 			int16		elemlength; /* typlen of the array element type */
@@ -461,7 +486,7 @@ typedef struct ExprEvalStep
 		{
 			TupleDesc	tupdesc;	/* descriptor for result tuples */
 			/* workspace for the values constituting the row: */
-			NullableDatum *elements;
+			RelNullableDatumArray elements;
 		}			row;
 
 		/* for EEOP_ROWCOMPARE_STEP */
@@ -469,7 +494,7 @@ typedef struct ExprEvalStep
 		{
 			/* lookup and call data for column comparison function */
 			bool		fn_strict; /* function is strict */
-			FunctionCallInfo fcinfo_data;
+			RelFunctionCallInfo fcinfo_data;
 			PGFunction	fn_addr;
 			/* target for comparison resulting in NULL */
 			int			jumpnull;
@@ -487,12 +512,12 @@ typedef struct ExprEvalStep
 		struct
 		{
 			/* workspace for argument values */
-			NullableDatum *arguments;
+			RelNullableDatumArray arguments;
 			int			nelems;
 			/* is it GREATEST or LEAST? */
 			MinMaxOp	op;
 			/* lookup and call data for comparison function */
-			FunctionCallInfo fcinfo_data;
+			RelFunctionCallInfo fcinfo_data;
 			PGFunction fn_addr;
 		}			minmax;
 
@@ -516,7 +541,7 @@ typedef struct ExprEvalStep
 			ExprEvalRowtypeCache *rowcache;
 
 			/* workspace for column values */
-			NullableDatum *columns;
+			RelNullableDatumArray columns;
 			int			ncolumns;
 		}			fieldstore;
 
@@ -547,7 +572,7 @@ typedef struct ExprEvalStep
 			/* name of constraint */
 			char	   *constraintname;
 			/* where the result of a CHECK constraint will be stored */
-			NullableDatum *check;
+			RelNullableDatum check;
 			/* OID of domain type */
 			Oid			resulttype;
 		}			domaincheck;
@@ -573,7 +598,7 @@ typedef struct ExprEvalStep
 			bool		typbyval;
 			char		typalign;
 			bool		fn_strict; /* function is strict */
-			FunctionCallInfo fcinfo_data;	/* arguments etc */
+			RelFunctionCallInfo fcinfo_data;	/* arguments etc */
 			/* faster to access without additional indirection: */
 			PGFunction	fn_addr;	/* actual call address */
 		}			scalararrayop;
@@ -585,8 +610,14 @@ typedef struct ExprEvalStep
 			bool		inclause;	/* true for IN and false for NOT IN */
 			struct ScalarArrayOpExprHashTable *elements_tab;
 			FmgrInfo   *finfo;	/* function's lookup data */
-			FunctionCallInfo fcinfo_data;	/* arguments etc */
+			RelFunctionCallInfo fcinfo_data;	/* arguments etc */
 			ScalarArrayOpExpr *saop;
+			/* faster to access without additional indirection: */
+			PGFunction	fn_addr;	/* actual call address */
+			FmgrInfo   *hash_finfo; /* function's lookup data */
+			FunctionCallInfo hash_fcinfo_data;	/* arguments etc */
+			/* faster to access without additional indirection: */
+			PGFunction	hash_fn_addr;	/* actual call address */
 		}			hashedscalararrayop;
 
 		/* for EEOP_XMLEXPR */
@@ -594,9 +625,9 @@ typedef struct ExprEvalStep
 		{
 			XmlExpr    *xexpr;	/* original expression node */
 			/* workspace for evaluating named args, if any */
-			NullableDatum *named_args;
+			RelNullableDatumArray named_args;
 			/* workspace for evaluating unnamed args, if any */
-			NullableDatum *args;
+			RelNullableDatumArray args;
 		}			xmlexpr;
 
 		/* for EEOP_JSON_CONSTRUCTOR */
@@ -634,7 +665,7 @@ typedef struct ExprEvalStep
 		/* for EEOP_AGG_*DESERIALIZE */
 		struct
 		{
-			FunctionCallInfo fcinfo_data;
+			RelFunctionCallInfo fcinfo_data;
 			PGFunction	fn_addr;
 			int			jumpnull;
 		}			agg_deserialize;
@@ -646,7 +677,7 @@ typedef struct ExprEvalStep
 			 * ->args contains pointers to the NullableDatums that need to be
 			 * checked for NULLs.
 			 */
-			NullableDatum *args;
+			RelNullableDatumArray args;
 			int			nargs;
 			int			jumpnull;
 		}			agg_strict_input_check;
@@ -667,9 +698,10 @@ typedef struct ExprEvalStep
 		}			agg_presorted_distinctcheck;
 
 		/* for EEOP_AGG_PLAIN_TRANS_[INIT_][STRICT_]{BYVAL,BYREF} */
-		struct
+		struct ExprEvalStepAggPlainTrans
 		{
-			FunctionCallInfo fcinfo_data;
+			RelFunctionCallInfo trans_fcinfo;
+#define FIELDNO_EXPREVALSTEPAGGPLAINTRANS_PERCALL 1
 			const AggStatePerCallContext *percall;
 			PGFunction	fn_addr;
 			int			setno;
@@ -689,6 +721,7 @@ typedef struct ExprEvalStep
 		{
 			AggStatePerTrans pertrans;
 			int			setno;
+			RelNullableDatumArray columns;
 		}			agg_trans_ordered;
 
 		// FIXME, better way to achieve padding
@@ -704,25 +737,44 @@ typedef struct ExprEvalStep
 StaticAssertDecl(sizeof(ExprEvalStep) <= 64,
 				 "size of ExprEvalStep exceeds 64 bytes");
 
+typedef enum ExprRelPtrKind
+{
+	ERP_BOOL,
+	ERP_NULLABLE_DATUM,
+	ERP_NULLABLE_DATUM_ARRAY,
+	ERP_FUNCTIONCALLINFO
+} ExprRelPtrKind;
+
+typedef struct ExprStateAllocation
+{
+	ExprRelPtr ptr;
+	uint16 sz;
+	bool zeroed;
+	uint8 kind;
+	void *initial_content;
+} ExprStateAllocation;
 
 typedef struct ExprStateBuilder
 {
 	uint8		flags;
 
 	int			steps_len;		/* number of steps currently */
-	int			steps_alloc;	/* allocated length of steps array */
 
 	struct PlanState *parent;	/* parent PlanState node, if any */
 	ParamListInfo ext_params;	/* for compiling PARAM_EXTERN nodes */
 
-	NullableDatum *innermost_caseval;
-	NullableDatum *innermost_domainval;
+	RelNullableDatum innermost_caseval;
+	RelNullableDatum innermost_domainval;
 
-	ExprEvalStep *steps;
+	List *steps;
 
 	/* original expression tree, for debugging only */
 	Expr	   *expr;
 
+	RelNullableDatum result;
+
+	uint32 allocation_size;
+	List *allocations;
 } ExprStateBuilder;
 
 
@@ -737,31 +789,25 @@ typedef struct ExprState
 	uint8		flags;			/* bitmask of EEO_FLAG_* bits, see above */
 
 	/*
-	 * Storage for result value of a scalar expression, or for individual
-	 * column results within expressions built by ExecBuildProjectionInfo().
-	 */
-#define FIELDNO_EXPRSTATE_RESULT 2
-	NullableDatum result;
-
-	/*
-	 * If projecting a tuple result, this slot holds the result; else NULL.
-	 */
-#define FIELDNO_EXPRSTATE_RESULTSLOT 3
-	TupleTableSlot *resultslot;
-
-
-	/*
 	 * Function that actually evaluates the expression.  This can be set to
 	 * different values depending on the complexity of the expression.
 	 */
 	ExprStateEvalFunc evalfunc;
 
-	/* original expression tree, for debugging only */
-	Expr	   *expr;
 
 	/* private state for an evalfunc */
 	void	   *evalfunc_private;
 
+	/*
+	 * If projecting a tuple result, this slot holds the result; else NULL.
+	 */
+#define FIELDNO_EXPRSTATE_RESULTSLOT 4
+	TupleTableSlot *resultslot;
+
+	/* original expression tree, for debugging only */
+	Expr	   *expr;
+
+	uint32		mutable_off;
 	int			steps_final_len;		/* number of steps */
 
 #define FIELDNO_EXPRSTATE_PARENT 8
@@ -771,8 +817,9 @@ typedef struct ExprState
 	 * Instructions to compute expression's return value.
 	 */
 #define FIELDNO_EXPRSTATE_STEPS 9
-	struct ExprEvalStep *steps;
-
+	struct ExprEvalStep steps[FLEXIBLE_ARRAY_MEMBER];
+	/* steps follow */
+	/* data follows */
 } ExprState;
 
 
@@ -794,10 +841,10 @@ typedef struct ExprState
 typedef struct ProjectionInfo
 {
 	NodeTag		type;
-	/* instructions to evaluate projection */
-	ExprState	pi_state;
 	/* expression context in which to evaluate expression */
 	ExprContext *pi_exprContext;
+	/* instructions to evaluate projection */
+	ExprState	pi_state;
 } ProjectionInfo;
 
 
@@ -813,18 +860,18 @@ typedef struct SubscriptingRefState
 	/* at runtime, subscripts are computed in upperindex[]/upperindexnull[] */
 	int			numupper;
 	bool	   *upperprovided;	/* indicates if this position is supplied */
-	NullableDatum *upperindex;
+	RelNullableDatumArray upperindex;
 
 	/* similarly for lower indexes, if any */
 	int			numlower;
 	bool	   *lowerprovided;
-	NullableDatum *lowerindex;
+	RelNullableDatumArray lowerindex;
 
 	/* for assignment, new value to assign is evaluated into here */
-	NullableDatum replace;
+	RelNullableDatum replace;
 
 	/* if we have a nested assignment, sbs_fetch_old puts old value here */
-	NullableDatum prev;
+	RelNullableDatum prev;
 } SubscriptingRefState;
 
 /* Execution step methods used for SubscriptingRef */
@@ -867,64 +914,91 @@ extern void CheckExprStillValid(ExprState *state, ExprContext *econtext);
  * execExprInterp.c, because that allows them to be used by other methods of
  * expression evaluation, reducing code duplication.
  */
-extern void ExecEvalFuncExprFusage(ExprState *state, ExprEvalStep *op,
-								   ExprContext *econtext);
-extern void ExecEvalFuncExprStrictFusage(ExprState *state, ExprEvalStep *op,
-										 ExprContext *econtext);
-extern void ExecEvalParamExec(ExprState *state, ExprEvalStep *op,
-							  ExprContext *econtext);
-extern void ExecEvalParamExtern(ExprState *state, ExprEvalStep *op,
-								ExprContext *econtext);
-extern void ExecEvalSQLValueFunction(ExprState *state, ExprEvalStep *op);
-extern void ExecEvalCurrentOfExpr(ExprState *state, ExprEvalStep *op);
-extern void ExecEvalNextValueExpr(ExprState *state, ExprEvalStep *op);
+extern void ExecEvalFuncExprFusage(ExprState *state, const ExprEvalStep *op,
+								   NullableDatum *opres,
+								   FunctionCallInfo fcinfo);
+extern void ExecEvalFuncExprStrictFusage(ExprState *state, const ExprEvalStep *op,
+										 NullableDatum *opres,
+										 FunctionCallInfo fcinfo);
+extern void ExecEvalParamExec(ExprState *state, const ExprEvalStep *op,
+							  ExprContext *econtext,
+							  NullableDatum *opres);
+extern void ExecEvalParamExtern(ExprState *state, const ExprEvalStep *op,
+								ExprContext *econtext,
+								NullableDatum *opres);
+extern void ExecEvalSQLValueFunction(ExprState *state, const ExprEvalStep *op,
+									 NullableDatum *opres);
+extern void ExecEvalCurrentOfExpr(ExprState *state, const ExprEvalStep *op);
+extern void ExecEvalNextValueExpr(ExprState *state, const ExprEvalStep *op,
+								  NullableDatum *opres);
 extern void ExecEvalRowNull(ExprState *state, ExprEvalStep *op,
-							ExprContext *econtext);
+							ExprContext *econtext, NullableDatum *opres);
 extern void ExecEvalRowNotNull(ExprState *state, ExprEvalStep *op,
-							   ExprContext *econtext);
-extern void ExecEvalArrayExpr(ExprState *state, ExprEvalStep *op);
-extern void ExecEvalArrayCoerceRelabel(ExprState *state, const ExprEvalStep *op);
-extern bool ExecEvalArrayCoerceUnpack(ExprState *state, const ExprEvalStep *op);
-extern bool ExecEvalArrayCoercePack(ExprState *state, const ExprEvalStep *op);
-extern void ExecEvalRow(ExprState *state, ExprEvalStep *op);
-extern void ExecEvalMinMax(ExprState *state, ExprEvalStep *op);
+							   ExprContext *econtext, NullableDatum *opres);
+extern void ExecEvalArrayExpr(ExprState *state, const ExprEvalStep *op,
+							  NullableDatum *opres, NullableDatum *elements);
+extern void ExecEvalArrayCoerceRelabel(ExprState *state, const ExprEvalStep *op,
+									   NullableDatum *opres);
+extern bool ExecEvalArrayCoerceUnpack(ExprState *state, const ExprEvalStep *op,
+									  NullableDatum *opres);
+extern bool ExecEvalArrayCoercePack(ExprState *state, const ExprEvalStep *op,
+									NullableDatum *opres);
+extern void ExecEvalRow(ExprState *state, const ExprEvalStep *op,
+						NullableDatum *opres, NullableDatum *elements);
+extern void ExecEvalMinMax(ExprState *state, const ExprEvalStep *op,
+						   NullableDatum *opres, NullableDatum *args,
+						   FunctionCallInfo fcinfo);
 extern void ExecEvalFieldSelect(ExprState *state, ExprEvalStep *op,
-								ExprContext *econtext);
-extern void ExecEvalFieldStoreDeForm(ExprState *state, ExprEvalStep *op,
-									 ExprContext *econtext);
-extern void ExecEvalFieldStoreForm(ExprState *state, ExprEvalStep *op,
-								   ExprContext *econtext);
+								ExprContext *econtext, NullableDatum *opres);
+extern void ExecEvalFieldStoreDeForm(ExprState *state, const ExprEvalStep *op,
+									 ExprContext *econtext,
+									 NullableDatum *opres, NullableDatum *columns);
+extern void ExecEvalFieldStoreForm(ExprState *state, const ExprEvalStep *op,
+								   NullableDatum *opres, NullableDatum *columns);
 extern void ExecEvalConvertRowtype(ExprState *state, ExprEvalStep *op,
-								   ExprContext *econtext);
-extern void ExecEvalScalarArrayOp(ExprState *state, ExprEvalStep *op);
+								   ExprContext *econtext,
+								   NullableDatum *opres);
+extern void ExecEvalScalarArrayOp(ExprState *state, ExprEvalStep *op,
+								  NullableDatum *opres, FunctionCallInfo fcinfo);
 extern void ExecEvalHashedScalarArrayOp(ExprState *state, ExprEvalStep *op,
-										ExprContext *econtext);
-extern void ExecEvalConstraintNotNull(ExprState *state, ExprEvalStep *op);
-extern void ExecEvalConstraintCheck(ExprState *state, ExprEvalStep *op);
-extern void ExecEvalXmlExpr(ExprState *state, ExprEvalStep *op);
-extern void ExecEvalJsonConstructor(ExprState *state, ExprEvalStep *op,
-									ExprContext *econtext);
-extern void ExecEvalJsonIsPredicate(ExprState *state, ExprEvalStep *op);
-extern void ExecEvalGroupingFunc(ExprState *state, ExprEvalStep *op);
-extern void ExecEvalSubPlan(ExprState *state, ExprEvalStep *op,
-							ExprContext *econtext);
+										ExprContext *econtext,
+										NullableDatum *opres, FunctionCallInfo fcinfo);
+extern void ExecEvalConstraintNotNull(ExprState *state, const ExprEvalStep *op,
+								   NullableDatum *opres);
+extern void ExecEvalConstraintCheck(ExprState *state, const ExprEvalStep *op,
+								   NullableDatum *check);
+extern void ExecEvalXmlExpr(ExprState *state, const ExprEvalStep *op,
+							NullableDatum *opres, NullableDatum *args,
+							NullableDatum *named_args);
+extern void ExecEvalJsonConstructor(ExprState *state, const ExprEvalStep *op,
+									ExprContext *econtext, NullableDatum *opres);
+extern void ExecEvalJsonIsPredicate(ExprState *state, ExprEvalStep *op, NullableDatum *opres);
+extern void ExecEvalGroupingFunc(ExprState *state, const ExprEvalStep *op,
+								 NullableDatum *opres);
+extern void ExecEvalSubPlan(ExprState *state, const ExprEvalStep *op,
+							ExprContext *econtext,
+							NullableDatum *opres);
 extern void ExecEvalWholeRowVar(ExprState *state, ExprEvalStep *op,
-								ExprContext *econtext);
-extern void ExecEvalSysVar(ExprState *state, ExprEvalStep *op,
-						   ExprContext *econtext, TupleTableSlot *slot);
+								ExprContext *econtext,
+								NullableDatum *opres);
+extern void ExecEvalSysVar(ExprState *state, int attnum,
+						   TupleTableSlot *slot, NullableDatum *opres);
 
-extern void ExecAggInitGroup(const AggStatePerCallContext *percall, AggStatePerGroup pergroup,
-							 FunctionCallInfi fcinfo);
+extern void ExecAggInitGroup(const AggStatePerCallContext *percall,
+							 AggStatePerGroup pergroup,
+							 FunctionCallInfo fcinfo);
 extern Datum ExecAggCopyTransValue(const AggStatePerCallContext *percall,
 								   Datum newValue, bool newValueIsNull,
-								   NullableDatum *oldvalue);
-extern bool ExecEvalPreOrderedDistinctSingle(AggState *aggstate,
+								   NullableDatum *oldValue);
+extern bool ExecEvalPreOrderedDistinctSingle(const AggStatePerCallContext *percall,
+											 AggState *aggstate,
 											 AggStatePerTrans pertrans);
-extern bool ExecEvalPreOrderedDistinctMulti(AggState *aggstate,
+extern bool ExecEvalPreOrderedDistinctMulti(const AggStatePerCallContext *percall,
+											AggState *aggstate,
 											AggStatePerTrans pertrans);
-extern void ExecEvalAggOrderedTransDatum(ExprState *state, ExprEvalStep *op,
-										 ExprContext *econtext);
-extern void ExecEvalAggOrderedTransTuple(ExprState *state, ExprEvalStep *op,
-										 ExprContext *econtext);
+extern void ExecEvalAggOrderedTransDatum(ExprState *state, const ExprEvalStep *op,
+										 NullableDatum *columns);
+extern void ExecEvalAggOrderedTransTuple(ExprState *state, const ExprEvalStep *op,
+										 NullableDatum *columns);
 
 #endif							/* EXEC_EXPR_H */

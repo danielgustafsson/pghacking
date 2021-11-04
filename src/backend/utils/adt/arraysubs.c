@@ -179,6 +179,8 @@ array_subscript_transform(SubscriptingRef *sbsref,
 static bool
 array_subscript_check_subscripts(struct ExprContext *econtext,
 								 SubscriptingRefState *sbsrefstate,
+								 NullableDatum *lowerindex,
+								 NullableDatum *upperindex,
 								 NullableDatum *result)
 {
 	ArraySubWorkspace *workspace = (ArraySubWorkspace *) sbsrefstate->workspace;
@@ -189,7 +191,7 @@ array_subscript_check_subscripts(struct ExprContext *econtext,
 		if (sbsrefstate->upperprovided[i])
 		{
 			/* If any index expr yields NULL, result is NULL or error */
-			if (sbsrefstate->upperindex[i].isnull)
+			if (upperindex[i].isnull)
 			{
 				if (sbsrefstate->isassignment)
 					ereport(ERROR,
@@ -198,7 +200,7 @@ array_subscript_check_subscripts(struct ExprContext *econtext,
 				result->isnull = true;
 				return false;
 			}
-			workspace->upperindex[i] = DatumGetInt32(sbsrefstate->upperindex[i].value);
+			workspace->upperindex[i] = DatumGetInt32(upperindex[i].value);
 		}
 	}
 
@@ -208,7 +210,7 @@ array_subscript_check_subscripts(struct ExprContext *econtext,
 		if (sbsrefstate->lowerprovided[i])
 		{
 			/* If any index expr yields NULL, result is NULL or error */
-			if (sbsrefstate->lowerindex[i].isnull)
+			if (lowerindex[i].isnull)
 			{
 				if (sbsrefstate->isassignment)
 					ereport(ERROR,
@@ -217,7 +219,7 @@ array_subscript_check_subscripts(struct ExprContext *econtext,
 				result->isnull = true;
 				return false;
 			}
-			workspace->lowerindex[i] = DatumGetInt32(sbsrefstate->lowerindex[i].value);
+			workspace->lowerindex[i] = DatumGetInt32(lowerindex[i].value);
 		}
 	}
 
@@ -234,6 +236,10 @@ array_subscript_check_subscripts(struct ExprContext *econtext,
 static void
 array_subscript_fetch(struct ExprContext *econtext,
 					  SubscriptingRefState *sbsrefstate,
+					  NullableDatum *lowerindex,
+					  NullableDatum *upperindex,
+					  NullableDatum *replace,
+					  NullableDatum *prev,
 					  NullableDatum *result)
 {
 	ArraySubWorkspace *workspace = (ArraySubWorkspace *) sbsrefstate->workspace;
@@ -261,6 +267,10 @@ array_subscript_fetch(struct ExprContext *econtext,
 static void
 array_subscript_fetch_slice(struct ExprContext *econtext,
 							SubscriptingRefState *sbsrefstate,
+							NullableDatum *lowerindex,
+							NullableDatum *upperindex,
+							NullableDatum *replace,
+							NullableDatum *prev,
 							NullableDatum *result)
 {
 	ArraySubWorkspace *workspace = (ArraySubWorkspace *) sbsrefstate->workspace;
@@ -290,6 +300,10 @@ array_subscript_fetch_slice(struct ExprContext *econtext,
 static void
 array_subscript_assign(struct ExprContext *econtext,
 					   SubscriptingRefState *sbsrefstate,
+					   NullableDatum *lowerindex,
+					   NullableDatum *upperindex,
+					   NullableDatum *replace,
+					   NullableDatum *prev,
 					   NullableDatum *result)
 {
 	ArraySubWorkspace *workspace = (ArraySubWorkspace *) sbsrefstate->workspace;
@@ -302,7 +316,7 @@ array_subscript_assign(struct ExprContext *econtext,
 	 */
 	if (workspace->refattrlength > 0)
 	{
-		if (result->isnull || sbsrefstate->replace.isnull)
+		if (result->isnull || replace->isnull)
 			return;
 	}
 
@@ -321,8 +335,8 @@ array_subscript_assign(struct ExprContext *econtext,
 	result->value = array_set_element(arraySource,
 									  sbsrefstate->numupper,
 									  workspace->upperindex,
-									  sbsrefstate->replace.value,
-									  sbsrefstate->replace.isnull,
+									  replace->value,
+									  replace->isnull,
 									  workspace->refattrlength,
 									  workspace->refelemlength,
 									  workspace->refelembyval,
@@ -339,6 +353,10 @@ array_subscript_assign(struct ExprContext *econtext,
 static void
 array_subscript_assign_slice(struct ExprContext *econtext,
 							 SubscriptingRefState *sbsrefstate,
+							 NullableDatum *lowerindex,
+							 NullableDatum *upperindex,
+							 NullableDatum *replace,
+							 NullableDatum *prev,
 							 NullableDatum *result)
 {
 	ArraySubWorkspace *workspace = (ArraySubWorkspace *) sbsrefstate->workspace;
@@ -351,7 +369,7 @@ array_subscript_assign_slice(struct ExprContext *econtext,
 	 */
 	if (workspace->refattrlength > 0)
 	{
-		if (result->isnull || sbsrefstate->replace.isnull)
+		if (result->isnull || replace->isnull)
 			return;
 	}
 
@@ -373,8 +391,8 @@ array_subscript_assign_slice(struct ExprContext *econtext,
 									workspace->lowerindex,
 									sbsrefstate->upperprovided,
 									sbsrefstate->lowerprovided,
-									sbsrefstate->replace.value,
-									sbsrefstate->replace.isnull,
+									replace->value,
+									replace->isnull,
 									workspace->refattrlength,
 									workspace->refelemlength,
 									workspace->refelembyval,
@@ -393,6 +411,10 @@ array_subscript_assign_slice(struct ExprContext *econtext,
 static void
 array_subscript_fetch_old(struct ExprContext *econtext,
 						  SubscriptingRefState *sbsrefstate,
+						  NullableDatum *lowerindex,
+						  NullableDatum *upperindex,
+						  NullableDatum *replace,
+						  NullableDatum *prev,
 						  NullableDatum *result)
 {
 	ArraySubWorkspace *workspace = (ArraySubWorkspace *) sbsrefstate->workspace;
@@ -400,18 +422,18 @@ array_subscript_fetch_old(struct ExprContext *econtext,
 	if (result->isnull)
 	{
 		/* whole array is null, so any element is too */
-		sbsrefstate->prev.value = (Datum) 0;
-		sbsrefstate->prev.isnull = true;
+		prev->value = (Datum) 0;
+		prev->isnull = true;
 	}
 	else
-		sbsrefstate->prev.value = array_get_element(result->value,
+		prev->value = array_get_element(result->value,
 													sbsrefstate->numupper,
 													workspace->upperindex,
 													workspace->refattrlength,
 													workspace->refelemlength,
 													workspace->refelembyval,
 													workspace->refelemalign,
-													&sbsrefstate->prev.isnull);
+													&prev->isnull);
 }
 
 /*
@@ -432,6 +454,10 @@ array_subscript_fetch_old(struct ExprContext *econtext,
 static void
 array_subscript_fetch_old_slice(struct ExprContext *econtext,
 								SubscriptingRefState *sbsrefstate,
+								NullableDatum *lowerindex,
+								NullableDatum *upperindex,
+								NullableDatum *replace,
+								NullableDatum *prev,
 								NullableDatum *result)
 {
 	ArraySubWorkspace *workspace = (ArraySubWorkspace *) sbsrefstate->workspace;
@@ -439,12 +465,12 @@ array_subscript_fetch_old_slice(struct ExprContext *econtext,
 	if (result->isnull)
 	{
 		/* whole array is null, so any slice is too */
-		sbsrefstate->prev.value = (Datum) 0;
-		sbsrefstate->prev.isnull = true;
+		prev->value = (Datum) 0;
+		prev->isnull = true;
 	}
 	else
 	{
-		sbsrefstate->prev.value = array_get_slice(result->value,
+		prev->value = array_get_slice(result->value,
 												  sbsrefstate->numupper,
 												  workspace->upperindex,
 												  workspace->lowerindex,
@@ -455,7 +481,7 @@ array_subscript_fetch_old_slice(struct ExprContext *econtext,
 												  workspace->refelembyval,
 												  workspace->refelemalign);
 		/* slices of non-null arrays are never null */
-		sbsrefstate->prev.isnull = false;
+		prev->isnull = false;
 	}
 }
 
