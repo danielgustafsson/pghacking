@@ -230,6 +230,8 @@ llvm_release_context(JitContext *context)
 	llvm_context->handles = NIL;
 
 	llvm_leave_fatal_on_oom();
+
+	//LLVMPrintAllTimers(true);
 }
 
 /*
@@ -625,6 +627,9 @@ llvm_optimize_module(LLVMJitContext *context, LLVMModuleRef module)
 	LLVMFinalizeFunctionPassManager(llvm_fpm);
 	LLVMDisposePassManager(llvm_fpm);
 
+
+	//LLVMPrintAllTimers(true);
+
 	/*
 	 * Perform module level optimization. We do so even in the non-optimized
 	 * case, so always-inline functions etc get inlined. It's cheap enough.
@@ -642,6 +647,8 @@ llvm_optimize_module(LLVMJitContext *context, LLVMModuleRef module)
 		LLVMAddFunctionInliningPass(llvm_mpm);
 	LLVMRunPassManager(llvm_mpm, context->module);
 	LLVMDisposePassManager(llvm_mpm);
+
+	//LLVMPrintAllTimers(true);
 
 	LLVMPassManagerBuilderDispose(llvm_pmb);
 }
@@ -869,6 +876,8 @@ llvm_session_initialize(void)
 										"-mergefunc-use-aliases"},
 								NULL);
 
+	//LLVMEnableStatistics();
+
 	/*
 	 * When targeting an LLVM version with opaque pointers enabled by default,
 	 * turn them off for the context we build our code in.  We don't need to
@@ -1032,6 +1041,8 @@ llvm_shutdown(int code, Datum arg)
 		}
 	}
 #endif							/* LLVM_VERSION_MAJOR > 11 */
+
+	LLVMShutdown();
 }
 
 /* helper for llvm_create_types, returning a function's return type */

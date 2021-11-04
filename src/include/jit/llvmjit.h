@@ -148,6 +148,8 @@ extern void LLVMPassManagerBuilderSetMergeFunctions(
 	struct LLVMOpaquePassManagerBuilder *PMBR,
 	bool value);
 
+extern void LLVMEnableStatistics(void);
+extern void LLVMPrintAllTimers(bool clear);
 
 #ifdef __cplusplus
 } /* extern "C" */

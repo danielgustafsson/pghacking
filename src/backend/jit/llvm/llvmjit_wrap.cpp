@@ -24,11 +24,16 @@ extern "C"
 /* Avoid macro clash with LLVM's C++ headers */
 #undef Min
 
+#include <llvm/ADT/Statistic.h>
 #include <llvm/Analysis/TargetLibraryInfo.h>
 #include <llvm/IR/Attributes.h>
 #include <llvm/IR/Function.h>
+#include <llvm/IR/PassTimingInfo.h>
 #include <llvm/MC/SubtargetFeature.h>
 #include <llvm/Support/Host.h>
+#include <llvm/Support/JSON.h>
+#include <llvm/Support/Timer.h>
+#include <llvm/Support/raw_ostream.h>
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
@@ -136,4 +141,34 @@ LLVMPassManagerBuilderSetMergeFunctions(
 #if LLVM_VERSION_MAJOR >= 7
 	unwrap(PMBR)->MergeFunctions = true;;
 #endif
+}
+
+void
+LLVMEnableStatistics()
+{
+	llvm::EnableStatistics(false /* print at shutdown */);
+}
+
+void
+LLVMPrintAllTimers(bool clear)
+{
+	std::string s;
+	llvm::raw_string_ostream o(s);
+
+	if (llvm::TimePassesIsEnabled)
+	{
+		llvm::TimerGroup::printAll(o);
+		if (clear)
+			llvm::TimerGroup::clearAll();
+	}
+
+	if (llvm::AreStatisticsEnabled())
+	{
+		llvm::PrintStatistics(o);
+		if (clear)
+			llvm::ResetStatistics();
+	}
+
+	if (s.size() > 0)
+		ereport(LOG, (errmsg("statistics: %s", s.c_str())));
 }
