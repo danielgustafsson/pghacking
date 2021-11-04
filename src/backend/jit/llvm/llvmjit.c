@@ -444,6 +444,7 @@ llvm_pg_func(LLVMModuleRef mod, const char *funcname)
 						   funcname,
 						   LLVMGetElementType(LLVMTypeOf(v_srcfn)));
 	llvm_copy_attributes(v_srcfn, v_fn);
+	LLVMSetVisibility(v_fn, LLVMHiddenVisibility);
 
 	return v_fn;
 }
@@ -545,6 +546,7 @@ llvm_function_reference(LLVMJitContext *context,
 		v_fn = LLVMAddGlobal(mod, TypePGFunction, funcname);
 		LLVMSetInitializer(v_fn, v_fn_addr);
 		LLVMSetGlobalConstant(v_fn, true);
+		LLVMSetVisibility(v_fn, LLVMHiddenVisibility);
 		LLVMSetLinkage(v_fn, LLVMPrivateLinkage);
 		LLVMSetUnnamedAddr(v_fn, true);
 
@@ -557,6 +559,7 @@ llvm_function_reference(LLVMJitContext *context,
 		return v_fn;
 
 	v_fn = LLVMAddFunction(mod, funcname, LLVMGetElementType(TypePGFunction));
+	LLVMSetVisibility(v_fn, LLVMHiddenVisibility);
 
 	return v_fn;
 }

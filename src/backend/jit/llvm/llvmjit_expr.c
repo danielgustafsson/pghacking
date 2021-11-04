@@ -223,7 +223,7 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 							 llvm_pg_var_func_type("TypeExprStateEvalFunc"));
 
 	LLVMSetLinkage(ecs.fn, LLVMExternalLinkage);
-	LLVMSetVisibility(ecs.fn, LLVMDefaultVisibility);
+	LLVMSetVisibility(ecs.fn, LLVMHiddenVisibility);
 	llvm_copy_attributes(AttributeTemplate, ecs.fn);
 
 	{

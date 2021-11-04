@@ -223,7 +223,10 @@ l_mcxt_switch(LLVMModuleRef mod, LLVMBuilderRef b, LLVMValueRef nc)
 	LLVMValueRef ret;
 
 	if (!(cur = LLVMGetNamedGlobal(mod, cmc)))
+	{
 		cur = LLVMAddGlobal(mod, l_ptr(StructMemoryContextData), cmc);
+		LLVMSetVisibility(cur, LLVMHiddenVisibility);
+	}
 	ret = LLVMBuildLoad(b, cur, "OldMemoryContext");
 	LLVMBuildStore(b, nc, cur);
 
