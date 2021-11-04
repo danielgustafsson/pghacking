@@ -17,14 +17,20 @@ extern "C"
 }
 
 #include <llvm-c/Core.h>
+#include <llvm-c/Target.h>
+#include <llvm-c/TargetMachine.h>
+#include <llvm-c/Transforms/PassManagerBuilder.h>
 
 /* Avoid macro clash with LLVM's C++ headers */
 #undef Min
 
+#include <llvm/Analysis/TargetLibraryInfo.h>
 #include <llvm/IR/Attributes.h>
 #include <llvm/IR/Function.h>
 #include <llvm/MC/SubtargetFeature.h>
 #include <llvm/Support/Host.h>
+#include <llvm/Target/TargetMachine.h>
+#include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
 #include "jit/llvmjit.h"
 
@@ -75,4 +81,49 @@ LLVMGetAttributeCountAtIndexPG(LLVMValueRef F, uint32 Idx)
 	 * always fall back to LLVM's C API.
 	 */
 	return LLVMGetAttributeCountAtIndex(F, Idx);
+}
+
+static inline llvm::PassManagerBuilder *
+unwrap(LLVMPassManagerBuilderRef P) {
+    return reinterpret_cast<llvm::PassManagerBuilder*>(P);
+}
+
+static inline LLVMPassManagerBuilderRef
+wrap(llvm::PassManagerBuilder *P) {
+	return reinterpret_cast<LLVMPassManagerBuilderRef>(P);
+}
+
+static inline llvm::TargetLibraryInfoImpl *
+unwrap(LLVMTargetLibraryInfoRef P) {
+	return reinterpret_cast<llvm::TargetLibraryInfoImpl*>(P);
+}
+
+static inline LLVMTargetLibraryInfoRef
+wrap(const llvm::TargetLibraryInfoImpl *P) {
+	llvm::TargetLibraryInfoImpl *X = const_cast<llvm::TargetLibraryInfoImpl*>(P);
+	return reinterpret_cast<LLVMTargetLibraryInfoRef>(X);
+}
+
+static llvm::TargetMachine *unwrap(LLVMTargetMachineRef P) {
+	return reinterpret_cast<llvm::TargetMachine *>(P);
+}
+
+static inline LLVMTargetMachineRef
+wrap(const llvm::TargetMachine *P) {
+	return reinterpret_cast<LLVMTargetMachineRef>(const_cast<llvm::TargetMachine *>(P));
+}
+
+LLVMTargetLibraryInfoRef
+LLVMGetTargetLibraryInfo(LLVMTargetMachineRef T)
+{
+	llvm::TargetLibraryInfoImpl *TLI =
+		new llvm::TargetLibraryInfoImpl(unwrap(T)->getTargetTriple());
+
+	return wrap(TLI);
+}
+
+void
+LLVMPassManagerBuilderUseLibraryInfo(LLVMPassManagerBuilderRef PMBR,
+									 LLVMTargetLibraryInfoRef TLI) {
+	unwrap(PMBR)->LibraryInfo = unwrap(TLI);
 }

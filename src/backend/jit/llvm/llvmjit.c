@@ -26,6 +26,7 @@
 #else
 #include <llvm-c/OrcBindings.h>
 #endif
+#include <llvm-c/Initialization.h>
 #include <llvm-c/Support.h>
 #include <llvm-c/Target.h>
 #include <llvm-c/Transforms/IPO.h>
@@ -97,6 +98,9 @@ static const char *llvm_triple = NULL;
 static const char *llvm_features = NULL;
 static const char *llvm_cpu = NULL;
 static const char *llvm_layout = NULL;
+static LLVMTargetMachineRef llvm_opt0_targetmachine;
+static LLVMTargetMachineRef llvm_opt3_targetmachine;
+
 
 
 static LLVMTargetRef llvm_targetref;
@@ -589,8 +593,10 @@ llvm_optimize_module(LLVMJitContext *context, LLVMModuleRef module)
 	 * a function the first time though.
 	 */
 	llvm_pmb = LLVMPassManagerBuilderCreate();
+	LLVMPassManagerBuilderUseLibraryInfo(llvm_pmb, LLVMGetTargetLibraryInfo(llvm_opt3_targetmachine));
 	LLVMPassManagerBuilderSetOptLevel(llvm_pmb, compile_optlevel);
 	llvm_fpm = LLVMCreateFunctionPassManagerForModule(module);
+	LLVMAddAnalysisPasses(llvm_opt3_targetmachine, llvm_fpm);
 
 	if (context->base.flags & PGJIT_OPT3)
 	{
@@ -622,6 +628,7 @@ llvm_optimize_module(LLVMJitContext *context, LLVMModuleRef module)
 	 * case, so always-inline functions etc get inlined. It's cheap enough.
 	 */
 	llvm_mpm = LLVMCreatePassManager();
+	LLVMAddAnalysisPasses(llvm_opt3_targetmachine, llvm_mpm);
 	LLVMPassManagerBuilderPopulateModulePassManager(llvm_pmb,
 													llvm_mpm);
 	/* always use always-inliner pass */
@@ -652,6 +659,8 @@ llvm_compile_module(LLVMJitContext *context)
 #else
 	LLVMOrcJITStackRef compile_orc;
 #endif
+
+	Assert(!LLVMVerifyModule(context->module, LLVMPrintMessageAction, NULL));
 
 	if (context->base.flags & PGJIT_OPT3)
 		compile_orc = llvm_opt3_orc;
@@ -711,6 +720,8 @@ llvm_compile_module(LLVMJitContext *context)
 	INSTR_TIME_SET_CURRENT(endtime);
 	INSTR_TIME_ACCUM_DIFF(context->base.instr.optimization_counter,
 						  endtime, starttime);
+
+	Assert(!LLVMVerifyModule(context->module, LLVMPrintMessageAction, NULL));
 
 	if (jit_dump_bitcode)
 	{
@@ -821,8 +832,6 @@ llvm_session_initialize(void)
 {
 	MemoryContext oldcontext;
 	char	   *error = NULL;
-	LLVMTargetMachineRef opt0_tm;
-	LLVMTargetMachineRef opt3_tm;
 
 	if (llvm_session_initialized)
 		return;
@@ -832,6 +841,26 @@ llvm_session_initialize(void)
 	LLVMInitializeNativeTarget();
 	LLVMInitializeNativeAsmPrinter();
 	LLVMInitializeNativeAsmParser();
+
+	if (1)
+	{
+		LLVMPassRegistryRef pass_registry;
+
+		pass_registry = LLVMGetGlobalPassRegistry();
+
+		LLVMInitializeCore(pass_registry);
+		LLVMInitializeTransformUtils(pass_registry);
+		LLVMInitializeScalarOpts(pass_registry);
+		LLVMInitializeVectorization(pass_registry);
+		LLVMInitializeInstCombine(pass_registry);
+		LLVMInitializeAggressiveInstCombiner(pass_registry);
+		LLVMInitializeIPO(pass_registry);
+		LLVMInitializeInstrumentation(pass_registry);
+		LLVMInitializeAnalysis(pass_registry);
+		LLVMInitializeIPA(pass_registry);
+		LLVMInitializeCodeGen(pass_registry);
+		LLVMInitializeTarget(pass_registry);
+	}
 
 	/*
 	 * When targeting an LLVM version with opaque pointers enabled by default,
@@ -865,12 +894,12 @@ llvm_session_initialize(void)
 	elog(DEBUG2, "LLVMJIT detected CPU \"%s\" for triple: %s, with features \"%s\"",
 		 llvm_cpu, llvm_triple, llvm_features);
 
-	opt0_tm =
+	llvm_opt0_targetmachine =
 		LLVMCreateTargetMachine(llvm_targetref, llvm_triple, llvm_cpu, llvm_features,
 								LLVMCodeGenLevelNone,
 								LLVMRelocDefault,
 								LLVMCodeModelJITDefault);
-	opt3_tm =
+	llvm_opt3_targetmachine =
 		LLVMCreateTargetMachine(llvm_targetref, llvm_triple, llvm_cpu, llvm_features,
 								LLVMCodeGenLevelAggressive,
 								LLVMRelocDefault,
@@ -881,7 +910,21 @@ llvm_session_initialize(void)
 
 #if LLVM_VERSION_MAJOR > 11
 	{
+		LLVMTargetMachineRef opt0_tm;
+		LLVMTargetMachineRef opt3_tm;
+
 		llvm_ts_context = LLVMOrcCreateNewThreadSafeContext();
+
+		opt0_tm =
+			LLVMCreateTargetMachine(llvm_targetref, llvm_triple, llvm_cpu, llvm_features,
+									LLVMCodeGenLevelNone,
+									LLVMRelocDefault,
+									LLVMCodeModelJITDefault);
+		opt3_tm =
+			LLVMCreateTargetMachine(llvm_targetref, llvm_triple, llvm_cpu, llvm_features,
+									LLVMCodeGenLevelAggressive,
+									LLVMRelocDefault,
+								LLVMCodeModelJITDefault);
 
 		llvm_opt0_orc = llvm_create_jit_instance(opt0_tm);
 		opt0_tm = 0;
@@ -891,8 +934,8 @@ llvm_session_initialize(void)
 	}
 #else							/* LLVM_VERSION_MAJOR > 11 */
 	{
-		llvm_opt0_orc = LLVMOrcCreateInstance(opt0_tm);
-		llvm_opt3_orc = LLVMOrcCreateInstance(opt3_tm);
+		llvm_opt0_orc = LLVMOrcCreateInstance(llvm_opt0_targetmachine);
+		llvm_opt3_orc = LLVMOrcCreateInstance(llvm_opt3_targetmachine);
 
 #if defined(HAVE_DECL_LLVMCREATEGDBREGISTRATIONLISTENER) && HAVE_DECL_LLVMCREATEGDBREGISTRATIONLISTENER
 		if (jit_debugging_support)

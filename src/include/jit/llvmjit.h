@@ -135,6 +135,20 @@ extern char *LLVMGetHostCPUFeatures(void);
 
 extern unsigned LLVMGetAttributeCountAtIndexPG(LLVMValueRef F, uint32 Idx);
 
+struct LLVMOpaqueTargetLibraryInfoData;
+struct LLVMOpaquePassManagerBuilder;
+struct LLVMOpaqueTargetMachine;
+
+extern struct LLVMOpaqueTargetLibraryInfotData *
+LLVMGetTargetLibraryInfo(struct LLVMOpaqueTargetMachine *TM);
+extern void LLVMPassManagerBuilderUseLibraryInfo(
+	struct LLVMOpaquePassManagerBuilder *PMBR,
+	struct LLVMOpaqueTargetLibraryInfotData *TLI);
+extern void LLVMPassManagerBuilderSetMergeFunctions(
+	struct LLVMOpaquePassManagerBuilder *PMBR,
+	bool value);
+
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
