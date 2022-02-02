@@ -2185,12 +2185,19 @@ sub connect_ok
 		connstr       => "$connstr",
 		on_error_stop => 0);
 
-	is($ret, 0, $test_name);
-
-	if (defined($params{expected_stdout}))
+	subtest "connect_ok_tests" => sub
 	{
-		like($stdout, $params{expected_stdout}, "$test_name: matches");
-	}
+		is($ret, 0, $test_name);
+
+		if (defined($params{expected_stdout}))
+		{
+			like($stdout, $params{expected_stdout}, "$test_name: stdout matches");
+		}
+
+		is($stderr, "", "$test_name: no stderr");
+		done_testing();
+	};
+
 	if (@log_like or @log_unlike)
 	{
 		my $log_contents = PostgreSQL::Test::Utils::slurp_file($self->logfile, $log_location);
