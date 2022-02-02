@@ -10,7 +10,7 @@ use File::Path qw(rmtree);
 use Fcntl qw(:seek);
 use PostgreSQL::Test::Cluster;
 use PostgreSQL::Test::Utils;
-use Test::More tests => 143;
+use Test::More;
 
 program_help_ok('pg_basebackup');
 program_version_ok('pg_basebackup');
@@ -768,3 +768,5 @@ SKIP:
 	rmtree("$tempdir/backup_gzip2");
 	rmtree("$tempdir/backup_gzip3");
 }
+
+done_testing();
