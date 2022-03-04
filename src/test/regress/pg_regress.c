@@ -74,6 +74,7 @@ const char *pretty_diff_opts = "-w -U3";
 /* options settable from command line */
 _stringlist *dblist = NULL;
 bool		debug = false;
+bool		verbose = false;
 char	   *inputdir = ".";
 char	   *outputdir = ".";
 char	   *bindir = PGBINDIR;
@@ -122,11 +123,17 @@ static int	fail_ignore_count = 0;
 static bool directory_exists(const char *dir);
 static void make_directory(const char *dir);
 
+typedef enum
+{
+	COMMENT_DIAGNOSTIC,
+	COMMENT_VERBOSE
+}			CommentLevel;
+
 struct output_func
 {
 	void (*header)(const char *line);
 	void (*footer)(const char *difffilename, const char *logfilename);
-	void (*comment)(bool diagnostic, const char *comment);
+	void (*comment)(CommentLevel level, const char *comment);
 
 	void (*test_status_preamble)(const char *testname);
 
@@ -141,7 +148,7 @@ void (*test_runtime)(const char *testname, double runtime);
 /* Text output format */
 static void header_text(const char *line);
 static void footer_text(const char *difffilename, const char *logfilename);
-static void comment_text(bool diagnostic, const char *comment);
+static void comment_text(CommentLevel level, const char *comment);
 static void test_status_preamble_text(const char *testname);
 static void test_status_ok_text(const char *testname);
 static void test_status_failed_text(const char *testname, bool ignore, char *tags);
@@ -160,7 +167,7 @@ struct output_func output_func_text =
 
 /* TAP output format */
 static void footer_tap(const char *difffilename, const char *logfilename);
-static void comment_tap(bool diagnostic, const char *comment);
+static void comment_tap(CommentLevel level, const char *comment);
 static void test_status_ok_tap(const char *testname);
 static void test_status_failed_tap(const char *testname, bool ignore, char *tags);
 
@@ -270,6 +277,9 @@ split_to_stringlist(const char *s, const char *delim, _stringlist **listhead)
 static void
 header_text(const char *line)
 {
+	if (!verbose)
+		return;
+
 	fprintf(stdout, "============== %-38s ==============\n", line);
 	fflush(stdout);
 }
@@ -305,22 +315,25 @@ footer(const char *difffilename, const char *logfilename)
 }
 
 static void
-comment_text(bool diagnostic, const char *comment)
+comment_text(CommentLevel level, const char *comment)
 {
+	if (level == COMMENT_VERBOSE && !verbose)
+		return;
+
 	status("%s", comment);
 }
 
 static void
-comment_tap(bool diagnostic, const char *comment)
+comment_tap(CommentLevel level, const char *comment)
 {
-	if (!diagnostic)
+	if (level != COMMENT_DIAGNOSTIC)
 		return;
 
 	status("# %s", comment);
 }
 
 static void
-comment(bool diagnostic, const char *fmt,...)
+comment(CommentLevel level, const char *fmt,...)
 {
 	char		tmp[256];
 	va_list		ap;
@@ -332,7 +345,7 @@ comment(bool diagnostic, const char *fmt,...)
 	vsnprintf(tmp, sizeof(tmp), fmt, ap);
 	va_end(ap);
 
-	output->comment(diagnostic, tmp);
+	output->comment(level, tmp);
 }
 
 static void
@@ -380,7 +393,7 @@ test_status_failed_tap(const char *testname, bool ignore, char *tags)
 		status("ok %i - %s ",
 			   (fail_count + fail_ignore_count + success_count),
 			   testname);
-		comment(true, "SKIP (ignored)");
+		comment(COMMENT_DIAGNOSTIC, "SKIP (ignored)");
 	}
 	else
 		status("not ok %i - %s",
@@ -390,7 +403,7 @@ test_status_failed_tap(const char *testname, bool ignore, char *tags)
 	if (tags && strlen(tags) > 0)
 	{
 		fprintf(stdout, "\n");
-		comment(true, tags);
+		comment(COMMENT_DIAGNOSTIC, tags);
 	}
 }
 
@@ -440,42 +453,52 @@ footer_text(const char *difffilename, const char *logfilename)
 	 */
 	if (fail_count == 0 && fail_ignore_count == 0)
 		snprintf(buf, sizeof(buf),
-				 _(" All %d tests passed. "),
+				 _("All %d tests passed. "),
 				 success_count);
 	else if (fail_count == 0)	/* fail_count=0, fail_ignore_count>0 */
 		snprintf(buf, sizeof(buf),
-				 _(" %d of %d tests passed, %d failed test(s) ignored. "),
+				 _("%d of %d tests passed, %d failed test(s) ignored. "),
 				 success_count,
 				 success_count + fail_ignore_count,
 				 fail_ignore_count);
 	else if (fail_ignore_count == 0)	/* fail_count>0 && fail_ignore_count=0 */
 		snprintf(buf, sizeof(buf),
-				 _(" %d of %d tests failed. "),
+				 _("%d of %d tests failed. "),
 				 fail_count,
 				 success_count + fail_count);
 	else
 		/* fail_count>0 && fail_ignore_count>0 */
 		snprintf(buf, sizeof(buf),
-				 _(" %d of %d tests failed, %d of these failures ignored. "),
+				 _("%d of %d tests failed, %d of these failures ignored. "),
 				 fail_count + fail_ignore_count,
 				 success_count + fail_count + fail_ignore_count,
 				 fail_ignore_count);
 
-	putchar('\n');
-	for (int i = strlen(buf); i > 0; i--)
-		putchar('=');
-	printf("\n%s\n", buf);
-	for (int i = strlen(buf); i > 0; i--)
-		putchar('=');
-	putchar('\n');
-	putchar('\n');
-
-	if (difffilename && logfilename)
+	if (verbose)
 	{
-		printf(_("The differences that caused some tests to fail can be viewed in the\n"
-				 "file \"%s\".  A copy of the test summary that you see\n"
-				 "above is saved in the file \"%s\".\n\n"),
-			   difffilename, logfilename);
+		putchar('\n');
+		for (int i = strlen(buf); i > 0; i--)
+			putchar('=');
+		printf("\n %s\n", buf);
+		for (int i = strlen(buf); i > 0; i--)
+			putchar('=');
+		putchar('\n');
+		putchar('\n');
+
+		if (difffilename && logfilename)
+		{
+			printf(_("The differences that caused some tests to fail can be viewed in the\n"
+					 "file \"%s\".  A copy of the test summary that you see\n"
+					 "above is saved in the file \"%s\".\n\n"),
+				   difffilename, logfilename);
+		}
+	}
+	else
+	{
+		printf("\n%s\n", buf);
+		if (difffilename && logfilename)
+			printf(_("Failing diffs: \"%s\"\nTest summary: \"%s\"\n"),
+					difffilename, logfilename);
 	}
 }
 
@@ -1015,13 +1038,13 @@ initialize_environment(void)
 		}
 
 		if (pghost && pgport)
-			comment(false, _("(using postmaster on %s, port %s)\n"), pghost, pgport);
+			comment(COMMENT_VERBOSE, _("(using postmaster on %s, port %s)\n"), pghost, pgport);
 		if (pghost && !pgport)
-			comment(false, _("(using postmaster on %s, default port)\n"), pghost);
+			comment(COMMENT_VERBOSE, _("(using postmaster on %s, default port)\n"), pghost);
 		if (!pghost && pgport)
-			comment(false, _("(using postmaster on Unix socket, port %s)\n"), pgport);
+			comment(COMMENT_VERBOSE, _("(using postmaster on Unix socket, port %s)\n"), pgport);
 		if (!pghost && !pgport)
-			comment(false, _("(using postmaster on Unix socket, default port)\n"));
+			comment(COMMENT_VERBOSE, _("(using postmaster on Unix socket, default port)\n"));
 	}
 
 	load_resultmap();
@@ -1753,7 +1776,7 @@ wait_for_tests(PID_TYPE * pids, int *statuses, instr_time *stoptimes,
 				statuses[i] = (int) exit_status;
 				INSTR_TIME_SET_CURRENT(stoptimes[i]);
 				if (names)
-					comment(false, " %s", names[i]);
+					comment(COMMENT_VERBOSE, " %s", names[i]);
 				tests_left--;
 				break;
 			}
@@ -1926,7 +1949,7 @@ run_schedule(const char *schedule, test_start_function startfunc,
 		{
 			int			oldest = 0;
 
-			comment(false, _("parallel group (%d tests, in groups of %d): "),
+			comment(COMMENT_VERBOSE, _("parallel group (%d tests, in groups of %d): "),
 					  num_tests, max_connections);
 			for (i = 0; i < num_tests; i++)
 			{
@@ -1947,7 +1970,7 @@ run_schedule(const char *schedule, test_start_function startfunc,
 		}
 		else
 		{
-			comment(false, _("parallel group (%d tests): "), num_tests);
+			comment(COMMENT_VERBOSE, _("parallel group (%d tests): "), num_tests);
 			for (i = 0; i < num_tests; i++)
 			{
 				pids[i] = (startfunc) (tests[i], &resultfiles[i], &expectfiles[i], &tags[i]);
@@ -2255,6 +2278,7 @@ help(void)
 	printf(_("                                (can be used multiple times to concatenate)\n"));
 	printf(_("      --temp-instance=DIR       create a temporary instance in DIR\n"));
 	printf(_("      --use-existing            use an existing installation\n"));
+	printf(_("  -v, --verbose                 verbose output, only applies to regress output format\n"));
 	printf(_("  -V, --version                 output version information, then exit\n"));
 	printf(_("\n"));
 	printf(_("Options for \"temp-instance\" mode:\n"));
@@ -2283,6 +2307,7 @@ regression_main(int argc, char *argv[],
 	static struct option long_options[] = {
 		{"help", no_argument, NULL, 'h'},
 		{"version", no_argument, NULL, 'V'},
+		{"verbose", no_argument, NULL, 'v'},
 		{"dbname", required_argument, NULL, 1},
 		{"debug", no_argument, NULL, 2},
 		{"inputdir", required_argument, NULL, 3},
@@ -2350,7 +2375,7 @@ regression_main(int argc, char *argv[],
 	if (getenv("PG_REGRESS_DIFF_OPTS"))
 		pretty_diff_opts = getenv("PG_REGRESS_DIFF_OPTS");
 
-	while ((c = getopt_long(argc, argv, "hV", long_options, &option_index)) != -1)
+	while ((c = getopt_long(argc, argv, "hVv", long_options, &option_index)) != -1)
 	{
 		switch (c)
 		{
@@ -2360,6 +2385,9 @@ regression_main(int argc, char *argv[],
 			case 'V':
 				puts("pg_regress (PostgreSQL) " PG_VERSION);
 				exit(0);
+			case 'v':
+				verbose = true;
+				break;
 			case 1:
 
 				/*
@@ -2463,6 +2491,9 @@ regression_main(int argc, char *argv[],
 		exit(0);
 	}
 
+	if (!verbose)
+		psql_formatting = pg_strdup("-q");
+
 	/*
 	 * text (regress) is the default so we don't need to set any variables in
 	 * that case.
@@ -2472,7 +2503,8 @@ regression_main(int argc, char *argv[],
 		if (strcmp(format, "tap") == 0)
 		{
 			output = &output_func_tap;
-			psql_formatting = pg_strdup("-q");
+			if (!psql_formatting)
+				psql_formatting = pg_strdup("-q");
 		}
 		else if (strcmp(format, "regress") != 0)
 		{
@@ -2735,7 +2767,7 @@ regression_main(int argc, char *argv[],
 #else
 #define ULONGPID(x) (unsigned long) (x)
 #endif
-		comment(false, _("running on port %d with PID %lu\n"),
+		comment(COMMENT_VERBOSE, _("running on port %d with PID %lu\n"),
 			   port, ULONGPID(postmaster_pid));
 	}
 	else
