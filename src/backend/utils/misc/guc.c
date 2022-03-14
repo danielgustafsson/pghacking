@@ -569,6 +569,7 @@ static const struct config_enum_entry wal_compression_options[] = {
 static const struct config_enum_entry ignore_event_trigger_options[] = {
 	{"none", IGNORE_EVENT_TRIGGER_NONE, false},
 	{"all", IGNORE_EVENT_TRIGGER_ALL, false},
+	{"login", IGNORE_EVENT_TRIGGER_LOGIN, false},
 	{NULL, 0, false}
 };
 

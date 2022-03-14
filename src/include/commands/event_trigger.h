@@ -32,7 +32,8 @@ typedef struct EventTriggerData
 typedef enum ignore_event_trigger_events
 {
 	IGNORE_EVENT_TRIGGER_NONE,
-	IGNORE_EVENT_TRIGGER_ALL
+	IGNORE_EVENT_TRIGGER_ALL,
+	IGNORE_EVENT_TRIGGER_LOGIN
 } IgnoreEventTriggersEvents;
 
 extern int ignore_event_trigger;
@@ -62,6 +63,7 @@ extern void EventTriggerDDLCommandStart(Node *parsetree);
 extern void EventTriggerDDLCommandEnd(Node *parsetree);
 extern void EventTriggerSQLDrop(Node *parsetree);
 extern void EventTriggerTableRewrite(Node *parsetree, Oid tableOid, int reason);
+extern void EventTriggerOnLogin(void);
 
 extern bool EventTriggerBeginCompleteQuery(void);
 extern void EventTriggerEndCompleteQuery(void);
