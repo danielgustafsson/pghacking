@@ -106,6 +106,8 @@ pg_hmac_create(pg_cryptohash_type type)
 	ctx->error = PG_HMAC_ERROR_NONE;
 	ctx->errreason = NULL;
 
+	ERR_clear_error();
+
 	/*
 	 * Initialization takes care of assigning the correct type for OpenSSL.
 	 */
