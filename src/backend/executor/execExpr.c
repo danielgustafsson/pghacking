@@ -72,6 +72,7 @@ static void ExecInitFunc(ExprEvalStep *scratch, Expr *node, List *args,
 static void ExecCreateExprSetupSteps(ExprState *state, Node *node);
 static void ExecPushExprSetupSteps(ExprState *state, ExprSetupInfo *info);
 static bool expr_setup_walker(Node *node, ExprSetupInfo *info);
+static bool ExprEvalPushStep(ExprState *es, const ExprEvalStep *s);
 static bool ExecComputeSlotInfo(ExprState *state, ExprEvalStep *op);
 static void ExecInitWholeRowVar(ExprEvalStep *scratch, Var *variable,
 								ExprState *state);
