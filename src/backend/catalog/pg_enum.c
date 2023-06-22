@@ -140,15 +140,15 @@ EnumValuesCreate(Oid enumTypeOid, List *vals)
 
 		ExecClearTuple(slot[slotCount]);
 
-		memset(slot[slotCount]->tts_isnull, false,
-			   slot[slotCount]->tts_tupleDescriptor->natts * sizeof(bool));
-
-		slot[slotCount]->tts_values[Anum_pg_enum_oid - 1] = ObjectIdGetDatum(oids[elemno]);
-		slot[slotCount]->tts_values[Anum_pg_enum_enumtypid - 1] = ObjectIdGetDatum(enumTypeOid);
-		slot[slotCount]->tts_values[Anum_pg_enum_enumsortorder - 1] = Float4GetDatum(elemno + 1);
+		slot[slotCount]->tts_values[Anum_pg_enum_oid - 1].value = ObjectIdGetDatum(oids[elemno]);
+		slot[slotCount]->tts_values[Anum_pg_enum_enumtypid - 1].value = ObjectIdGetDatum(enumTypeOid);
+		slot[slotCount]->tts_values[Anum_pg_enum_enumsortorder - 1].value = Float4GetDatum(elemno + 1);
 
 		namestrcpy(enumlabel, lab);
-		slot[slotCount]->tts_values[Anum_pg_enum_enumlabel - 1] = NameGetDatum(enumlabel);
+		slot[slotCount]->tts_values[Anum_pg_enum_enumlabel - 1].value = NameGetDatum(enumlabel);
+
+		for (int attnum = 0; attnum < slot[slotCount]->tts_tupleDescriptor->natts; attnum++)
+			slot[slotCount]->tts_values[attnum].isnull = false;
 
 		ExecStoreVirtualTuple(slot[slotCount]);
 		slotCount++;

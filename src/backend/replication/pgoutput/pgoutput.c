@@ -1308,7 +1308,7 @@ pgoutput_row_filter(Relation relation, TupleTableSlot *old_slot,
 		/*
 		 * if the column in the new tuple or old tuple is null, nothing to do
 		 */
-		if (new_slot->tts_isnull[i] || old_slot->tts_isnull[i])
+		if (new_slot->tts_values[i].isnull || old_slot->tts_values[i].isnull)
 			continue;
 
 		/*
@@ -1318,8 +1318,8 @@ pgoutput_row_filter(Relation relation, TupleTableSlot *old_slot,
 		 * VARTAG_INDIRECT. See ReorderBufferToastReplace.
 		 */
 		if (att->attlen == -1 &&
-			VARATT_IS_EXTERNAL_ONDISK(new_slot->tts_values[i]) &&
-			!VARATT_IS_EXTERNAL_ONDISK(old_slot->tts_values[i]))
+			VARATT_IS_EXTERNAL_ONDISK(new_slot->tts_values[i].value) &&
+			!VARATT_IS_EXTERNAL_ONDISK(old_slot->tts_values[i].value))
 		{
 			if (!tmp_new_slot)
 			{
@@ -1327,13 +1327,10 @@ pgoutput_row_filter(Relation relation, TupleTableSlot *old_slot,
 				ExecClearTuple(tmp_new_slot);
 
 				memcpy(tmp_new_slot->tts_values, new_slot->tts_values,
-					   desc->natts * sizeof(Datum));
-				memcpy(tmp_new_slot->tts_isnull, new_slot->tts_isnull,
-					   desc->natts * sizeof(bool));
+					   desc->natts * sizeof(NullableDatum));
 			}
 
 			tmp_new_slot->tts_values[i] = old_slot->tts_values[i];
-			tmp_new_slot->tts_isnull[i] = old_slot->tts_isnull[i];
 		}
 	}
 

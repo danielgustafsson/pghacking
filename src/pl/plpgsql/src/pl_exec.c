@@ -384,23 +384,7 @@ static ParamListInfo setup_param_list(PLpgSQL_execstate *estate,
 									  PLpgSQL_expr *expr);
 static ParamExternData *plpgsql_param_fetch(ParamListInfo params,
 											int paramid, bool speculative,
-<<<<<<< HEAD
 											ParamExternData *prm);
-static void plpgsql_param_compile(ParamListInfo params, Param *param,
-								  ExprState *state,
-								  Datum *resv, bool *resnull);
-static void plpgsql_param_eval_var(ExprState *state, ExprEvalStep *op,
-								   ExprContext *econtext);
-static void plpgsql_param_eval_var_ro(ExprState *state, ExprEvalStep *op,
-									  ExprContext *econtext);
-static void plpgsql_param_eval_recfield(ExprState *state, ExprEvalStep *op,
-										ExprContext *econtext);
-static void plpgsql_param_eval_generic(ExprState *state, ExprEvalStep *op,
-									   ExprContext *econtext);
-static void plpgsql_param_eval_generic_ro(ExprState *state, ExprEvalStep *op,
-										  ExprContext *econtext);
-=======
-											ParamExternData *workspace);
 static ExecEvalParamCallback plpgsql_param_compile(ParamListInfo params, const Param *param,
 												   void **private);
 static void plpgsql_param_eval_var(void *callback_private, ExprContext *econtext,
@@ -413,7 +397,6 @@ static void plpgsql_param_eval_generic(void *callback_private, ExprContext *econ
 									   const Param *param, NullableDatum *result);
 static void plpgsql_param_eval_generic_ro(void *callback_private, ExprContext *econtext,
 										  const Param *param, NullableDatum *result);
->>>>>>> f57e1874a1 (WIP: expression eval: Decouple PARAM_CALLBACK interface more strongly from execExpr.c.)
 static void exec_move_row(PLpgSQL_execstate *estate,
 						  PLpgSQL_variable *target,
 						  HeapTuple tup, TupleDesc tupdesc);

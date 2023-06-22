@@ -160,7 +160,7 @@ build_replindex_scan_key(ScanKey skey, Relation rel, Relation idxrel,
 		skey[skey_attoff].sk_collation = idxrel->rd_indcollation[index_attoff];
 
 		/* Check for null value. */
-		if (searchslot->tts_isnull[table_attno - 1].isnull)
+		if (searchslot->tts_values[table_attno - 1].isnull)
 			skey[skey_attoff].sk_flags |= (SK_ISNULL | SK_SEARCHNULL);
 
 		skey_attoff++;

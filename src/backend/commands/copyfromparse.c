@@ -955,7 +955,7 @@ NextCopyFrom(CopyFromState cstate, ExprContext *econtext,
 				Assert(econtext != NULL);
 				Assert(CurrentMemoryContext == econtext->ecxt_per_tuple_memory);
 
-				values[m].value = ExecEvalExpr(defexprs[m], econtext, &nulls[m]);
+				values[m].value = ExecEvalExpr(defexprs[m], econtext, &values[m].isnull);
 			}
 			else
 				values[m].value = InputFunctionCall(&in_functions[m],

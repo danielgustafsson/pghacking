@@ -633,8 +633,8 @@ finalize_windowaggregate(WindowAggState *winstate,
 	else
 	{
 		result->value =
-			MakeExpandedObjectReadOnly(peraggstate->transValue,
-									   peraggstate->transValueIsNull,
+			MakeExpandedObjectReadOnly(peraggstate->transValue.value,
+									   peraggstate->transValue.isnull,
 									   peraggstate->transtypeLen);
 	}
 
@@ -2313,8 +2313,8 @@ ExecWindowAgg(PlanState *pstate)
 						numfuncs = winstate->numfuncs;
 						for (i = 0; i < numfuncs; i++)
 						{
-							econtext->ecxt_aggvalues[i] = (Datum) 0;
-							econtext->ecxt_aggnulls[i] = true;
+							econtext->ecxt_aggvalues[i].value = (Datum) 0;
+							econtext->ecxt_aggvalues[i].isnull = true;
 						}
 					}
 				}

@@ -482,8 +482,6 @@ ExecBuildProjectionInfo(List *targetList,
 	esb.expr = (Expr *) targetList;
 	esb.parent = parent;
 
-	state->resultslot = slot;
-
 	/* Insert setup steps as needed */
 	ExecCreateExprSetupSteps(&esb, (Node *) targetList);
 
@@ -1001,7 +999,7 @@ ExecCheck(ExprState *state, ExprContext *econtext)
  * Therefore this should be used instead of directly calling
  * ExecReadyInterpretedExpr().
  */
-static void*
+static void *
 ExecReadyExprEmbedded(ExprStateBuilder *esb, size_t prefix)
 {
 	ExprState *state;
@@ -1611,9 +1609,9 @@ ExecInitExprRec(ExprStateBuilder *esb, Expr *node, RelNullableDatum result)
 				if (subplan->subLinkType == MULTIEXPR_SUBLINK)
 				{
 					scratch.opcode = EEOP_CONST;
-					scratch.d.constval.value = (Datum) 0;
-					scratch.d.constval.isnull = true;
-					ExprEvalPushStep(&esb, &scratch);
+					scratch.d.constval.value.value = (Datum) 0;
+					scratch.d.constval.value.isnull = true;
+					ExprEvalPushStep(esb, &scratch);
 					break;
 				}
 
@@ -2960,8 +2958,7 @@ ExecPushExprSetupSteps(ExprStateBuilder *esb, ExprSetupInfo *info)
 		scratch.d.subplan.sstate = sstate;
 
 		/* The result can be ignored, but we better put it somewhere */
-		scratch.resvalue = &state->resvalue;
-		scratch.resnull = &state->resnull;
+		scratch.result = esb->result;
 
 		ExprEvalPushStep(esb, &scratch);
 	}
@@ -4484,6 +4481,10 @@ ExprOpToString(ExprEvalOp op)
 		case EEOP_AGG_PLAIN_TRANS_BYREF: return "EEOP_AGG_PLAIN_TRANS_BYREF";
 		case EEOP_AGG_ORDERED_TRANS_DATUM: return "EEOP_AGG_ORDERED_TRANS_DATUM";
 		case EEOP_AGG_ORDERED_TRANS_TUPLE: return "EEOP_AGG_ORDERED_TRANS_TUPLE";
+		case EEOP_AGG_PRESORTED_DISTINCT_MULTI: return "EEOP_AGG_PRESORTED_DISTINCT_MULTI";
+		case EEOP_JSON_CONSTRUCTOR: return "EEOP_JSON_CONSTRUCTOR";
+		case EEOP_IS_JSON: return "EEOP_IS_JSON";
+		case EEOP_AGG_PRESORTED_DISTINCT_SINGLE: return "EEOP_AGG_PRESORTED_DISTINCT_SINGLE";
 		case EEOP_LAST: return "EEOP_LAST";
 	}
 	pg_unreachable();

@@ -235,16 +235,16 @@ MemoizeHash_equal(struct memoize_hash *tb, const MemoizeKey *key1,
 		{
 			FormData_pg_attribute *attr;
 
-			if (tslot->tts_isnull[i] != pslot->tts_isnull[i])
+			if (tslot->tts_values[i].isnull != pslot->tts_values[i].isnull)
 				return false;
 
 			/* both NULL? they're equal */
-			if (tslot->tts_isnull[i])
+			if (tslot->tts_values[i].isnull)
 				continue;
 
 			/* perform binary comparison on the two datums */
 			attr = &tslot->tts_tupleDescriptor->attrs[i];
-			if (!datum_image_eq(tslot->tts_values[i], pslot->tts_values[i],
+			if (!datum_image_eq(tslot->tts_values[i].value, pslot->tts_values[i].value,
 								attr->attbyval, attr->attlen))
 				return false;
 		}

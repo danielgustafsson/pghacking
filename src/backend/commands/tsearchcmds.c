@@ -1049,13 +1049,13 @@ DefineTSConfiguration(List *names, List *parameters, ObjectAddress *copied)
 
 			ExecClearTuple(slot[slot_stored_count]);
 
-			memset(slot[slot_stored_count]->tts_isnull, false,
-				   slot[slot_stored_count]->tts_tupleDescriptor->natts * sizeof(bool));
+			slot[slot_stored_count]->tts_values[Anum_pg_ts_config_map_mapcfg - 1].value = cfgOid;
+			slot[slot_stored_count]->tts_values[Anum_pg_ts_config_map_maptokentype - 1].value = cfgmap->maptokentype;
+			slot[slot_stored_count]->tts_values[Anum_pg_ts_config_map_mapseqno - 1].value = cfgmap->mapseqno;
+			slot[slot_stored_count]->tts_values[Anum_pg_ts_config_map_mapdict - 1].value = cfgmap->mapdict;
 
-			slot[slot_stored_count]->tts_values[Anum_pg_ts_config_map_mapcfg - 1] = cfgOid;
-			slot[slot_stored_count]->tts_values[Anum_pg_ts_config_map_maptokentype - 1] = cfgmap->maptokentype;
-			slot[slot_stored_count]->tts_values[Anum_pg_ts_config_map_mapseqno - 1] = cfgmap->mapseqno;
-			slot[slot_stored_count]->tts_values[Anum_pg_ts_config_map_mapdict - 1] = cfgmap->mapdict;
+			for (int attnum = 0; attnum < slot[slot_stored_count]->tts_tupleDescriptor->natts; attnum++)
+				slot[slot_stored_count]->tts_values[attnum].isnull = false;
 
 			ExecStoreVirtualTuple(slot[slot_stored_count]);
 			slot_stored_count++;
@@ -1407,13 +1407,13 @@ MakeConfigurationMapping(AlterTSConfigurationStmt *stmt,
 			{
 				ExecClearTuple(slot[slotCount]);
 
-				memset(slot[slotCount]->tts_isnull, false,
-					   slot[slotCount]->tts_tupleDescriptor->natts * sizeof(bool));
+				slot[slotCount]->tts_values[Anum_pg_ts_config_map_mapcfg - 1].value = ObjectIdGetDatum(cfgId);
+				slot[slotCount]->tts_values[Anum_pg_ts_config_map_maptokentype - 1].value = Int32GetDatum(tokens[i]);
+				slot[slotCount]->tts_values[Anum_pg_ts_config_map_mapseqno - 1].value = Int32GetDatum(j + 1);
+				slot[slotCount]->tts_values[Anum_pg_ts_config_map_mapdict - 1].value = ObjectIdGetDatum(dictIds[j]);
 
-				slot[slotCount]->tts_values[Anum_pg_ts_config_map_mapcfg - 1] = ObjectIdGetDatum(cfgId);
-				slot[slotCount]->tts_values[Anum_pg_ts_config_map_maptokentype - 1] = Int32GetDatum(tokens[i]);
-				slot[slotCount]->tts_values[Anum_pg_ts_config_map_mapseqno - 1] = Int32GetDatum(j + 1);
-				slot[slotCount]->tts_values[Anum_pg_ts_config_map_mapdict - 1] = ObjectIdGetDatum(dictIds[j]);
+				for (int attnum = 0; attnum < slot[slotCount]->tts_tupleDescriptor->natts; attnum++)
+					slot[slotCount]->tts_values[attnum].isnull = false;
 
 				ExecStoreVirtualTuple(slot[slotCount]);
 				slotCount++;

@@ -119,7 +119,7 @@ typedef struct PlannedStmt
  */
 typedef struct Plan
 {
-	pg_node_attr(abstract, no_equal, no_query_jumble)
+	pg_node_attr(abstract, no_query_jumble)
 
 	NodeTag		type;
 
@@ -1420,7 +1420,7 @@ typedef struct PlanRowMark
  */
 typedef struct PartitionPruneInfo
 {
-	pg_node_attr(no_equal, no_query_jumble)
+	pg_node_attr(no_query_jumble)
 
 	NodeTag		type;
 	List	   *prune_infos;

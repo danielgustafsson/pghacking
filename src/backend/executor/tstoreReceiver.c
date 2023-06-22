@@ -158,7 +158,7 @@ tstoreReceiveSlot_detoast(TupleTableSlot *slot, DestReceiver *self)
 
 		if (!attr->attisdropped && attr->attlen == -1 && !val->isnull)
 		{
-			if (VARATT_IS_EXTERNAL(DatumGetPointer(val)))
+			if (VARATT_IS_EXTERNAL(DatumGetPointer(val->value)))
 			{
 				val->value = PointerGetDatum(detoast_external_attr((struct varlena *)
 																   DatumGetPointer(val->value)));

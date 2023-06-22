@@ -122,8 +122,8 @@ tts_virtual_clear(TupleTableSlot *slot)
 }
 
 /*
- * VirtualTupleTableSlots always have fully populated tts_values and
- * tts_isnull arrays.  So this function should never be called.
+ * VirtualTupleTableSlots always have fully populated tts_values arrays.  So
+ * this function should never be called.
  */
 static void
 tts_virtual_getsomeattrs(TupleTableSlot *slot, int natts)

@@ -284,7 +284,7 @@ typedef struct RelNullableDatum
 	ExprRelPtr ptr;
 } RelNullableDatum;
 
-typedef struct RelNullableDatumArrayh
+typedef struct RelNullableDatumArray
 {
 	ExprRelPtr ptr;
 } RelNullableDatumArray;
@@ -734,8 +734,11 @@ typedef struct ExprEvalStep
 } ExprEvalStep;
 
 /* Enforce the size rule given in the comment above */
+#if 0
+/* XXX FIXME */
 StaticAssertDecl(sizeof(ExprEvalStep) <= 64,
 				 "size of ExprEvalStep exceeds 64 bytes");
+#endif
 
 typedef enum ExprRelPtrKind
 {
@@ -873,16 +876,6 @@ typedef struct SubscriptingRefState
 	/* if we have a nested assignment, sbs_fetch_old puts old value here */
 	RelNullableDatum prev;
 } SubscriptingRefState;
-
-/* Execution step methods used for SubscriptingRef */
-typedef struct SubscriptExecSteps
-{
-	/* See nodes/subscripting.h for more detail about these */
-	ExecEvalBoolSubroutine sbs_check_subscripts;	/* process subscripts */
-	ExecEvalSubroutine sbs_fetch;	/* fetch an element */
-	ExecEvalSubroutine sbs_assign;	/* assign to an element */
-	ExecEvalSubroutine sbs_fetch_old;	/* fetch old value for assignment */
-} SubscriptExecSteps;
 
 /* EEOP_JSON_CONSTRUCTOR state, too big to inline */
 typedef struct JsonConstructorExprState

@@ -792,8 +792,8 @@ logicalrep_write_tuple(StringInfo out, Relation rel, TupleTableSlot *slot,
 	pq_sendint16(out, nliveatts);
 
 	slot_getallattrs(slot);
-	values = slot->tts_values;
-	isnull = slot->tts_isnull;
+	values = &slot->tts_values->value;
+	isnull = &slot->tts_values->isnull;
 
 	/* Write the values */
 	for (i = 0; i < desc->natts; i++)

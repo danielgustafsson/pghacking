@@ -149,7 +149,7 @@ struct TupleTableSlotOps
 	void		(*clear) (TupleTableSlot *slot);
 
 	/*
-	 * Fill up first natts entries of tts_values and tts_isnull arrays with
+	 * Fill up first natts entries of tts_values arrays with
 	 * values from the tuple contained in the slot. The function may be called
 	 * with natts more than the number of attributes available in the tuple,
 	 * in which case it should set tts_nvalid to the number of returned

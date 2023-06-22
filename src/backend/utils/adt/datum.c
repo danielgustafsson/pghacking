@@ -255,6 +255,10 @@ datumIsEqual(Datum value1, Datum value2, bool typByVal, int typLen)
 	return res;
 }
 
+/*
+ * XXX FIXME: do we need a nullabledatum_image_eq function ?
+ */
+
 /*-------------------------------------------------------------------------
  * datum_image_eq
  *

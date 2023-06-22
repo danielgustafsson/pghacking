@@ -1113,20 +1113,18 @@ finalize_aggregate(AggState *aggstate,
 		}
 		else
 		{
-			Datum		result;
-
 			result->value = FunctionCallInvoke(fcinfo);
 			result->isnull = fcinfo->isnull;
 			result->value = MakeExpandedObjectReadOnly(result->value,
-													fcinfo->isnull,
+													result->isnull,
 													peragg->resulttypeLen);
 		}
 	}
 	else
 	{
 		result->value =
-			MakeExpandedObjectReadOnly(pergroupstate->transValue,
-									   pergroupstate->transValueIsNull,
+			MakeExpandedObjectReadOnly(pergroupstate->transValue.value,
+									   pergroupstate->transValue.isnull,
 									   pertrans->transtypeLen);
 		*result = pergroupstate->transValue;
 	}
@@ -1164,7 +1162,7 @@ finalize_partialaggregate(AggState *aggstate,
 		else
 		{
 			FunctionCallInfo fcinfo = pertrans->serialfn_fcinfo;
-			Datum		resultVal;
+			NullableDatum		resultVal;
 
 			fcinfo->args[0].value =
 				MakeExpandedObjectReadOnly(pergroupstate->transValue.value,
@@ -1174,21 +1172,19 @@ finalize_partialaggregate(AggState *aggstate,
 			fcinfo->args[0].isnull = pergroupstate->transValue.isnull;
 			fcinfo->isnull = false;
 
-			result->value = FunctionCallInvoke(fcinfo);
-			result->isnull = fcinfo->isnull;
-			resultVal = MakeExpandedObjectReadOnly(result->value,
-													fcinfo->isnull,
-													peragg->resulttypeLen);
+			resultVal.value = FunctionCallInvoke(fcinfo);
+			resultVal.isnull = fcinfo->isnull;
+			result->value = MakeExpandedObjectReadOnly(resultVal.value,
+													   resultVal.isnull,
+													   peragg->resulttypeLen);
 			fcinfo->context = NULL;
 		}
 	}
 	else
 	{
-		*result = pergroupstate->transValue;
-		*resultVal =
-			MakeExpandedObjectReadOnly(pergroupstate->transValue,
-									   pergroupstate->transValueIsNull,
-									   pertrans->transtypeLen);
+		result->value = MakeExpandedObjectReadOnly(pergroupstate->transValue.value,
+												   pergroupstate->transValue.isnull,
+												   pertrans->transtypeLen);
 	}
 
 	MemoryContextSwitchTo(oldContext);

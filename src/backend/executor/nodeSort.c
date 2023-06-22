@@ -199,7 +199,7 @@ ExecSort(PlanState *pstate)
 		ExecClearTuple(slot);
 		if (tuplesort_getdatum(tuplesortstate, ScanDirectionIsForward(dir),
 							   false, &(slot->tts_values[0].value),
-							   &(slot->tts_isnull[0].isnull), NULL))
+							   &(slot->tts_values[0].isnull), NULL))
 			ExecStoreVirtualTuple(slot);
 	}
 	else

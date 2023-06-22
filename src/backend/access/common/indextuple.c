@@ -218,7 +218,7 @@ index_form_tuple_context(TupleDesc tupleDescriptor,
 	return tuple;
 }
 
-IndexTuple
+static IndexTuple
 index_form_tuple_s(TupleDesc tupleDescriptor,
 				   NullableDatum *values)
 {
