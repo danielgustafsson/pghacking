@@ -709,7 +709,6 @@ typedef struct ExprEvalStep
 			int			setoff;
 		}			agg_trans;
 
-
 		/* for EEOP_IS_JSON */
 		struct
 		{
@@ -877,13 +876,23 @@ typedef struct SubscriptingRefState
 	RelNullableDatum prev;
 } SubscriptingRefState;
 
+/* Execution step methods used for SubscriptingRef */
+typedef struct SubscriptExecSteps
+{
+	/* See nodes/subscripting.h for more detail about these */
+	ExecEvalBoolSubroutine sbs_check_subscripts;	/* process subscripts */
+	ExecEvalSubroutine sbs_fetch;	/* fetch an element */
+	ExecEvalSubroutine sbs_assign;	/* assign to an element */
+	ExecEvalSubroutine sbs_fetch_old;	/* fetch old value for assignment */
+} SubscriptExecSteps;
+#endif
+
 /* EEOP_JSON_CONSTRUCTOR state, too big to inline */
 typedef struct JsonConstructorExprState
 {
 	JsonConstructorExpr *constructor;
-	Datum	   *arg_values;
-	bool	   *arg_nulls;
-	Oid		   *arg_types;
+	RelNullableDatumArray	   arg_values;
+	Oid			   *arg_types;
 	struct
 	{
 		int			category;
@@ -964,8 +973,9 @@ extern void ExecEvalXmlExpr(ExprState *state, const ExprEvalStep *op,
 							NullableDatum *opres, NullableDatum *args,
 							NullableDatum *named_args);
 extern void ExecEvalJsonConstructor(ExprState *state, const ExprEvalStep *op,
-									ExprContext *econtext, NullableDatum *opres);
-extern void ExecEvalJsonIsPredicate(ExprState *state, ExprEvalStep *op, NullableDatum *opres);
+									ExprContext *econtext, NullableDatum *opres,
+									NullableDatum *arg_values);
+extern void ExecEvalJsonIsPredicate(ExprState *state, const ExprEvalStep *op, NullableDatum *opres);
 extern void ExecEvalGroupingFunc(ExprState *state, const ExprEvalStep *op,
 								 NullableDatum *opres);
 extern void ExecEvalSubPlan(ExprState *state, const ExprEvalStep *op,

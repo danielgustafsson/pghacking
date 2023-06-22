@@ -1181,7 +1181,7 @@ catenate_stringinfo_string(StringInfo buffer, const char *addon)
 }
 
 Datum
-json_build_object_worker(int nargs, Datum *args, bool *nulls, Oid *types,
+json_build_object_worker(int nargs, NullableDatum *args, Oid *types,
 						 bool absent_on_null, bool unique_keys)
 {
 	int			i;
@@ -1211,7 +1211,7 @@ json_build_object_worker(int nargs, Datum *args, bool *nulls, Oid *types,
 		int			key_offset;
 
 		/* Skip null values if absent_on_null */
-		skip = absent_on_null && nulls[i + 1];
+		skip = absent_on_null && args[i + 1].isnull;
 
 		if (skip)
 		{
@@ -1229,7 +1229,7 @@ json_build_object_worker(int nargs, Datum *args, bool *nulls, Oid *types,
 		}
 
 		/* process key */
-		if (nulls[i])
+		if (args[i].isnull)
 			ereport(ERROR,
 					(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 					 errmsg("null value not allowed for object key")));
@@ -1237,7 +1237,7 @@ json_build_object_worker(int nargs, Datum *args, bool *nulls, Oid *types,
 		/* save key offset before appending it */
 		key_offset = out->len;
 
-		add_json(args[i], false, out, types[i], true);
+		add_json(args[i].value, false, out, types[i], true);
 
 		if (unique_keys)
 		{
@@ -1256,7 +1256,7 @@ json_build_object_worker(int nargs, Datum *args, bool *nulls, Oid *types,
 		appendStringInfoString(result, " : ");
 
 		/* process value */
-		add_json(args[i + 1], nulls[i + 1], result, types[i + 1], false);
+		add_json(args[i + 1].value, args[i + 1].isnull, result, types[i + 1], false);
 	}
 
 	appendStringInfoChar(result, '}');
@@ -1271,6 +1271,7 @@ Datum
 json_build_object(PG_FUNCTION_ARGS)
 {
 	Datum	   *args;
+	NullableDatum *values;
 	bool	   *nulls;
 	Oid		   *types;
 
@@ -1281,7 +1282,15 @@ json_build_object(PG_FUNCTION_ARGS)
 	if (nargs < 0)
 		PG_RETURN_NULL();
 
-	PG_RETURN_DATUM(json_build_object_worker(nargs, args, nulls, types, false, false));
+	/* XXX: Converting to NullableDatum is wasteful here */
+	values = palloc(nargs * sizeof(NullableDatum));
+	for (int i = 0; i < nargs; i++)
+	{
+		values[i].value = args[i];
+		values[i].isnull = nulls[i];
+	}
+
+	PG_RETURN_DATUM(json_build_object_worker(nargs, values, types, false, false));
 }
 
 /*
@@ -1294,7 +1303,7 @@ json_build_object_noargs(PG_FUNCTION_ARGS)
 }
 
 Datum
-json_build_array_worker(int nargs, Datum *args, bool *nulls, Oid *types,
+json_build_array_worker(int nargs, NullableDatum *args, Oid *types,
 						bool absent_on_null)
 {
 	int			i;
@@ -1307,12 +1316,12 @@ json_build_array_worker(int nargs, Datum *args, bool *nulls, Oid *types,
 
 	for (i = 0; i < nargs; i++)
 	{
-		if (absent_on_null && nulls[i])
+		if (absent_on_null && args[i].isnull)
 			continue;
 
 		appendStringInfoString(result, sep);
 		sep = ", ";
-		add_json(args[i], nulls[i], result, types[i], false);
+		add_json(args[i].value, args[i].isnull, result, types[i], false);
 	}
 
 	appendStringInfoChar(result, ']');
@@ -1327,6 +1336,7 @@ Datum
 json_build_array(PG_FUNCTION_ARGS)
 {
 	Datum	   *args;
+	NullableDatum *values;
 	bool	   *nulls;
 	Oid		   *types;
 
@@ -1337,7 +1347,14 @@ json_build_array(PG_FUNCTION_ARGS)
 	if (nargs < 0)
 		PG_RETURN_NULL();
 
-	PG_RETURN_DATUM(json_build_array_worker(nargs, args, nulls, types, false));
+	values = palloc(nargs * sizeof(NullableDatum));
+	for (int i = 0; i < nargs; i++)
+	{
+		values[i].value = args[i];
+		values[i].isnull = nulls[i];
+	}
+
+	PG_RETURN_DATUM(json_build_array_worker(nargs, values, types, false));
 }
 
 /*

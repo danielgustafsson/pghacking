@@ -2475,21 +2475,23 @@ ExecInitExprRec(ExprStateBuilder *esb, Expr *node, RelNullableDatum result)
 				JsonValueExpr *jve = (JsonValueExpr *) node;
 
 				Assert(jve->formatted_expr != NULL);
-				ExecInitExprRec(jve->formatted_expr, state, resv, resnull);
+				ExecInitExprRec(esb, jve->formatted_expr, result);
 				break;
 			}
 
 		case T_JsonConstructorExpr:
 			{
 				JsonConstructorExpr *ctor = (JsonConstructorExpr *) node;
+				NullableDatum *arg_values;
 				List	   *args = ctor->args;
 				ListCell   *lc;
 				int			nargs = list_length(args);
 				int			argno = 0;
+				char	   *ptr;
 
 				if (ctor->func)
 				{
-					ExecInitExprRec(ctor->func, state, resv, resnull);
+					ExecInitExprRec(esb, ctor->func, result);
 				}
 				else if ((ctor->type == JSCTOR_JSON_PARSE && !ctor->unique) ||
 						 ctor->type == JSCTOR_JSON_SERIALIZE)
@@ -2501,15 +2503,25 @@ ExecInitExprRec(ExprStateBuilder *esb, Expr *node, RelNullableDatum result)
 				{
 					JsonConstructorExprState *jcstate;
 
-					jcstate = palloc0(sizeof(JsonConstructorExprState));
+					/*
+					 * Allocate jcstate, with enough space for the per-value
+					 * type array too.
+					 */
+					jcstate = palloc0(MAXALIGN(sizeof(JsonConstructorExprState)) +
+									  nargs * (sizeof(Oid)));
+
+					/* Set up per-value type array */
+					ptr = (char *) jcstate + MAXALIGN(sizeof(JsonConstructorExprState));
+					jcstate->arg_types = (Oid *) ptr;
+
 
 					scratch.opcode = EEOP_JSON_CONSTRUCTOR;
 					scratch.d.json_constructor.jcstate = jcstate;
 
 					jcstate->constructor = ctor;
-					jcstate->arg_values = (Datum *) palloc(sizeof(Datum) * nargs);
-					jcstate->arg_nulls = (bool *) palloc(sizeof(bool) * nargs);
-					jcstate->arg_types = (Oid *) palloc(sizeof(Oid) * nargs);
+
+					jcstate->arg_values =
+						ExprBuilderAllocNullableDatumArrayInit(esb, nargs, &arg_values);
 					jcstate->nargs = nargs;
 
 					foreach(lc, args)
@@ -2523,14 +2535,14 @@ ExecInitExprRec(ExprStateBuilder *esb, Expr *node, RelNullableDatum result)
 							/* Don't evaluate const arguments every round */
 							Const	   *con = (Const *) arg;
 
-							jcstate->arg_values[argno] = con->constvalue;
-							jcstate->arg_nulls[argno] = con->constisnull;
+							arg_values[argno].value = con->constvalue;
+							arg_values[argno].isnull = con->constisnull;
 						}
 						else
 						{
-							ExecInitExprRec(arg, state,
-											&jcstate->arg_values[argno],
-											&jcstate->arg_nulls[argno]);
+							ExecInitExprRec(esb, arg,
+											RelArrayIdx(jcstate->arg_values, argno));
+							arg_values[argno].isnull = false;
 						}
 						argno++;
 					}
@@ -2558,21 +2570,16 @@ ExecInitExprRec(ExprStateBuilder *esb, Expr *node, RelNullableDatum result)
 						}
 					}
 
-					ExprEvalPushStep(state, &scratch);
+					ExprEvalPushStep(esb, &scratch);
 				}
 
 				if (ctor->coercion)
 				{
-					Datum	   *innermost_caseval = state->innermost_caseval;
-					bool	   *innermost_isnull = state->innermost_casenull;
+					RelNullableDatum innermost_caseval = esb->innermost_caseval;
 
-					state->innermost_caseval = resv;
-					state->innermost_casenull = resnull;
-
-					ExecInitExprRec(ctor->coercion, state, resv, resnull);
-
-					state->innermost_caseval = innermost_caseval;
-					state->innermost_casenull = innermost_isnull;
+					esb->innermost_caseval = result;
+					ExecInitExprRec(esb, ctor->coercion, result);
+					esb->innermost_caseval = innermost_caseval;
 				}
 			}
 			break;
@@ -2581,12 +2588,12 @@ ExecInitExprRec(ExprStateBuilder *esb, Expr *node, RelNullableDatum result)
 			{
 				JsonIsPredicate *pred = (JsonIsPredicate *) node;
 
-				ExecInitExprRec((Expr *) pred->expr, state, resv, resnull);
+				ExecInitExprRec(esb, (Expr *) pred->expr, result);
 
 				scratch.opcode = EEOP_IS_JSON;
 				scratch.d.is_json.pred = pred;
 
-				ExprEvalPushStep(state, &scratch);
+				ExprEvalPushStep(esb, &scratch);
 				break;
 			}
 

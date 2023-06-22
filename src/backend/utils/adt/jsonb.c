@@ -1126,7 +1126,7 @@ datum_to_jsonb(Datum val, JsonTypeCategory tcategory, Oid outfuncoid)
 }
 
 Datum
-jsonb_build_object_worker(int nargs, Datum *args, bool *nulls, Oid *types,
+jsonb_build_object_worker(int nargs, NullableDatum *args, Oid *types,
 						  bool absent_on_null, bool unique_keys)
 {
 	int			i;
@@ -1151,22 +1151,22 @@ jsonb_build_object_worker(int nargs, Datum *args, bool *nulls, Oid *types,
 		/* process key */
 		bool		skip;
 
-		if (nulls[i])
+		if (args[i].isnull)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("argument %d: key must not be null", i + 1)));
 
 		/* skip null values if absent_on_null */
-		skip = absent_on_null && nulls[i + 1];
+		skip = absent_on_null && args[i + 1].isnull;
 
 		/* we need to save skipped keys for the key uniqueness check */
 		if (skip && !unique_keys)
 			continue;
 
-		add_jsonb(args[i], false, &result, types[i], true);
+		add_jsonb(args[i].value, false, &result, types[i], true);
 
 		/* process value */
-		add_jsonb(args[i + 1], nulls[i + 1], &result, types[i + 1], false);
+		add_jsonb(args[i + 1].value, args[i + 1].isnull, &result, types[i + 1], false);
 	}
 
 	result.res = pushJsonbValue(&result.parseState, WJB_END_OBJECT, NULL);
@@ -1181,6 +1181,7 @@ Datum
 jsonb_build_object(PG_FUNCTION_ARGS)
 {
 	Datum	   *args;
+	NullableDatum *values;
 	bool	   *nulls;
 	Oid		   *types;
 
@@ -1191,7 +1192,14 @@ jsonb_build_object(PG_FUNCTION_ARGS)
 	if (nargs < 0)
 		PG_RETURN_NULL();
 
-	PG_RETURN_DATUM(jsonb_build_object_worker(nargs, args, nulls, types, false, false));
+	values = palloc(nargs * sizeof(NullableDatum));
+	for (int i = 0; i < nargs; i++)
+	{
+		values[i].value = args[i];
+		values[i].isnull = nulls[i];
+	}
+
+	PG_RETURN_DATUM(jsonb_build_object_worker(nargs, values, types, false, false));
 }
 
 /*
@@ -1211,7 +1219,7 @@ jsonb_build_object_noargs(PG_FUNCTION_ARGS)
 }
 
 Datum
-jsonb_build_array_worker(int nargs, Datum *args, bool *nulls, Oid *types,
+jsonb_build_array_worker(int nargs, NullableDatum *args, Oid *types,
 						 bool absent_on_null)
 {
 	int			i;
@@ -1223,10 +1231,10 @@ jsonb_build_array_worker(int nargs, Datum *args, bool *nulls, Oid *types,
 
 	for (i = 0; i < nargs; i++)
 	{
-		if (absent_on_null && nulls[i])
+		if (absent_on_null && args[i].isnull)
 			continue;
 
-		add_jsonb(args[i], nulls[i], &result, types[i], false);
+		add_jsonb(args[i].value, args[i].isnull, &result, types[i], false);
 	}
 
 	result.res = pushJsonbValue(&result.parseState, WJB_END_ARRAY, NULL);
@@ -1241,6 +1249,7 @@ Datum
 jsonb_build_array(PG_FUNCTION_ARGS)
 {
 	Datum	   *args;
+	NullableDatum *values;
 	bool	   *nulls;
 	Oid		   *types;
 
@@ -1251,7 +1260,14 @@ jsonb_build_array(PG_FUNCTION_ARGS)
 	if (nargs < 0)
 		PG_RETURN_NULL();
 
-	PG_RETURN_DATUM(jsonb_build_array_worker(nargs, args, nulls, types, false));
+	values = palloc(nargs * sizeof(NullableDatum));
+	for (int i = 0; i < nargs; i++)
+	{
+		values[i].value = args[i];
+		values[i].isnull = nulls[i];
+	}
+
+	PG_RETURN_DATUM(jsonb_build_array_worker(nargs, values, types, false));
 }
 
 

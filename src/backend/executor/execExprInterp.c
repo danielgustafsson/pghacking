@@ -1777,14 +1777,17 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 		EEO_CASE(EEOP_JSON_CONSTRUCTOR)
 		{
 			/* too complex for an inline implementation */
-			ExecEvalJsonConstructor(state, op, econtext);
+			ExecEvalJsonConstructor(state, op, econtext,
+									RELPTR_RESOLVE(data, op->result),
+									RELPTR_RESOLVE(data, op->d.json_constructor.jcstate->arg_values));
 			EEO_NEXT();
 		}
 
 		EEO_CASE(EEOP_IS_JSON)
 		{
 			/* too complex for an inline implementation */
-			ExecEvalJsonIsPredicate(state, op);
+			ExecEvalJsonIsPredicate(state, op,
+									RELPTR_RESOLVE(data, op->result));
 
 			EEO_NEXT();
 		}
@@ -4222,30 +4225,26 @@ ExecEvalXmlExpr(ExprState *state, const ExprEvalStep *op,
  * Evaluate a JSON constructor expression.
  */
 void
-ExecEvalJsonConstructor(ExprState *state, ExprEvalStep *op,
-						ExprContext *econtext)
+ExecEvalJsonConstructor(ExprState *state, const ExprEvalStep *op,
+						ExprContext *econtext, NullableDatum *opres,
+						NullableDatum *arg_values)
 {
 	Datum		res;
 	JsonConstructorExprState *jcstate = op->d.json_constructor.jcstate;
 	JsonConstructorExpr *ctor = jcstate->constructor;
 	bool		is_jsonb = ctor->returning->format->format_type == JS_FORMAT_JSONB;
-	bool		isnull = false;
 
 	if (ctor->type == JSCTOR_JSON_ARRAY)
 		res = (is_jsonb ?
 			   jsonb_build_array_worker :
 			   json_build_array_worker) (jcstate->nargs,
-										 jcstate->arg_values,
-										 jcstate->arg_nulls,
-										 jcstate->arg_types,
+										 arg_values, jcstate->arg_types,
 										 jcstate->constructor->absent_on_null);
 	else if (ctor->type == JSCTOR_JSON_OBJECT)
 		res = (is_jsonb ?
 			   jsonb_build_object_worker :
 			   json_build_object_worker) (jcstate->nargs,
-										  jcstate->arg_values,
-										  jcstate->arg_nulls,
-										  jcstate->arg_types,
+										  arg_values, jcstate->arg_types,
 										  jcstate->constructor->absent_on_null,
 										  jcstate->constructor->unique);
 	else if (ctor->type == JSCTOR_JSON_SCALAR)
@@ -4292,24 +4291,25 @@ ExecEvalJsonConstructor(ExprState *state, ExprEvalStep *op,
 	else
 		elog(ERROR, "invalid JsonConstructorExpr type %d", ctor->type);
 
-	*op->resvalue = res;
-	*op->resnull = isnull;
+	opres->value = res;
+	opres->isnull = false;
 }
 
 /*
  * Evaluate a IS JSON predicate.
  */
 void
-ExecEvalJsonIsPredicate(ExprState *state, ExprEvalStep *op)
+ExecEvalJsonIsPredicate(ExprState *state, const ExprEvalStep *op,
+						NullableDatum *opres)
 {
 	JsonIsPredicate *pred = op->d.is_json.pred;
-	Datum		js = *op->resvalue;
+	Datum		js = opres->value;
 	Oid			exprtype;
 	bool		res;
 
-	if (*op->resnull)
+	if (opres->isnull)
 	{
-		*op->resvalue = BoolGetDatum(false);
+		opres->value = BoolGetDatum(false);
 		return;
 	}
 
@@ -4381,7 +4381,7 @@ ExecEvalJsonIsPredicate(ExprState *state, ExprEvalStep *op)
 	else
 		res = false;
 
-	*op->resvalue = BoolGetDatum(res);
+	opres->value = BoolGetDatum(res);
 }
 
 

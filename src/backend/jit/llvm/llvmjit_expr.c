@@ -2148,14 +2148,16 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 				break;
 
 			case EEOP_JSON_CONSTRUCTOR:
-				build_EvalXFunc(b, mod, "ExecEvalJsonConstructor",
-								v_state, op, v_econtext);
+				build_EvalXFunc(&ecs, "ExecEvalJsonConstructor",
+								expr_opp(&ecs, opno),
+								v_resultp);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
 			case EEOP_IS_JSON:
-				build_EvalXFunc(b, mod, "ExecEvalJsonIsPredicate",
-								v_state, op);
+				build_EvalXFunc(&ecs, "ExecEvalJsonIsPredicate",
+								expr_opp(&ecs, opno),
+								v_resultp);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
