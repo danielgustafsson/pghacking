@@ -810,12 +810,11 @@ typedef struct SubscriptingRefState
 typedef struct SubscriptExecSteps
 {
 	/* See nodes/subscripting.h for more detail about these */
-	ExecEvalBoolSubroutine sbs_check_subscripts;	/* process subscripts */
-	ExecEvalSubroutine sbs_fetch;	/* fetch an element */
-	ExecEvalSubroutine sbs_assign;	/* assign to an element */
-	ExecEvalSubroutine sbs_fetch_old;	/* fetch old value for assignment */
+	ExecEvalSubscriptCallback sbs_check_subscripts;	/* process subscripts */
+	ExecEvalSubscriptCallback sbs_fetch;	/* fetch an element */
+	ExecEvalSubscriptCallback sbs_assign;	/* assign to an element */
+	ExecEvalSubscriptCallback sbs_fetch_old;	/* fetch old value for assignment */
 } SubscriptExecSteps;
-#endif
 
 /* EEOP_JSON_CONSTRUCTOR state, too big to inline */
 typedef struct JsonConstructorExprState

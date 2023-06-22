@@ -171,16 +171,6 @@ typedef bool (*ExecEvalSubscriptCheckCallback)(struct ExprContext *econtext,
 											   NullableDatum *upperindex,
 											   NullableDatum *result);
 
-/* Execution step methods used for SubscriptingRef */
-typedef struct SubscriptExecSteps
-{
-	/* See nodes/subscripting.h for more detail about these */
-	ExecEvalSubscriptCheckCallback sbs_check_subscripts;	/* process subscripts */
-	ExecEvalSubscriptCallback sbs_fetch;	/* fetch an element */
-	ExecEvalSubscriptCallback sbs_assign;	/* assign to an element */
-	ExecEvalSubscriptCallback sbs_fetch_old;	/* fetch old value for assignment */
-} SubscriptExecSteps;
-
 /* Struct returned by the SQL-visible subscript handler function */
 typedef struct SubscriptRoutines
 {
