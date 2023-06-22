@@ -2418,6 +2418,23 @@ typedef struct ProjectionInfo
 	ExprState	pi_state;
 } ProjectionInfo;
 
+/*
+ * AggStatePerCallContext - per agg related function invocation
+ *
+ * This provides state to functions like AggCheckCallContext(),
+ * AggGetAggref(), AggStateIsShared(), ...
+ */
+struct AggStatePerCallContext
+{
+	NodeTag		type;
+	AggState   *aggstate;
+	AggStatePerTrans pertrans;
+	ExprContext *aggcontext;
+	/* only set for final function invocations */
+	AggStatePerAgg peragg;
+	/* not set for deserialization invocations */
+	int			setno;
+};
 /* ----------------
  *	WindowAggState information
  * ----------------

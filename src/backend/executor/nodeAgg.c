@@ -779,9 +779,9 @@ advance_ordered_transition_function(AggState *aggstate,
 	 */
 	if (!pertrans->transtypeByVal &&
 		DatumGetPointer(newVal) != DatumGetPointer(pergroupstate->transValue.value))
-		newVal = ExecAggCopyTransValue(percall
+		newVal = ExecAggCopyTransValue(percall,
 									   newVal, fcinfo->isnull,
-									   pergroupstate->transValue);
+									   &pergroupstate->transValue);
 
 	pergroupstate->transValue.value = newVal;
 	pergroupstate->transValue.isnull = fcinfo->isnull;
@@ -896,7 +896,9 @@ process_ordered_aggregate_single(AggState *aggstate,
 		}
 		else
 		{
-			advance_ordered_transition_function(aggstate, percall, pertrans, pergroupstate, fcinfo, pergroupstate, percall->aggcontext);
+			advance_ordered_transition_function(aggstate, percall, pertrans,
+												fcinfo, pergroupstate,
+												percall->aggcontext);
 
 			MemoryContextSwitchTo(oldContext);
 

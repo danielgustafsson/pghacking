@@ -692,8 +692,8 @@ typedef struct ExprEvalStep
 		/* for EEOP_AGG_PRESORTED_DISTINCT_{SINGLE,MULTI} */
 		struct
 		{
-			AggStatePerTrans pertrans;
-			ExprContext *aggcontext;
+			RelFunctionCallInfo trans_fcinfo;
+			const AggStatePerCallContext *percall;
 			int			jumpdistinct;
 		}			agg_presorted_distinctcheck;
 
@@ -925,10 +925,12 @@ extern Datum ExecAggCopyTransValue(const AggStatePerCallContext *percall,
 								   NullableDatum *oldValue);
 extern bool ExecEvalPreOrderedDistinctSingle(const AggStatePerCallContext *percall,
 											 AggState *aggstate,
-											 AggStatePerTrans pertrans);
+											 AggStatePerTrans pertrans,
+											 FunctionCallInfo fcinfo);
 extern bool ExecEvalPreOrderedDistinctMulti(const AggStatePerCallContext *percall,
 											AggState *aggstate,
-											AggStatePerTrans pertrans);
+											AggStatePerTrans pertrans,
+											FunctionCallInfo fcinfo);
 extern void ExecEvalAggOrderedTransDatum(ExprState *state, const ExprEvalStep *op,
 										 NullableDatum *columns);
 extern void ExecEvalAggOrderedTransTuple(ExprState *state, const ExprEvalStep *op,

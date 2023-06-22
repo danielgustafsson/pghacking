@@ -185,7 +185,7 @@ typedef struct AggStatePerAggData
 	 * There can be multiple identical Aggref's sharing the same per-agg. This
 	 * points to the first one of them.
 	 */
-	Aggref	   *aggref;
+	struct Aggref	   *aggref;
 
 	/* index to the state value which this agg should use */
 	int			transno;
@@ -311,24 +311,6 @@ typedef struct AggStatePerHashData
 	AttrNumber *hashGrpColIdxHash;	/* indices in hash table tuples */
 	Agg		   *aggnode;		/* original Agg node, for numGroups etc. */
 }			AggStatePerHashData;
-
-/*
- * AggStatePerCallContext - per agg related function invocation
- *
- * This provides state to functions like AggCheckCallContext(),
- * AggGetAggref(), AggStateIsShared(), ...
- */
-struct AggStatePerCallContext
-{
-	NodeTag		type;
-	AggState   *aggstate;
-	AggStatePerTrans pertrans;
-	ExprContext *aggcontext;
-	/* only set for final function invocations */
-	AggStatePerAgg peragg;
-	/* not set for deserialization invocations */
-	int			setno;
-};
 
 extern AggState *ExecInitAgg(Agg *node, EState *estate, int eflags);
 extern void ExecEndAgg(AggState *node);

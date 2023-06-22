@@ -2599,17 +2599,19 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 			case EEOP_AGG_PRESORTED_DISTINCT_SINGLE:
 				{
 					AggState   *aggstate = castNode(AggState, state->parent);
-					AggStatePerTrans pertrans = op->d.agg_presorted_distinctcheck.pertrans;
+					const AggStatePerCallContext *percall = op->d.agg_presorted_distinctcheck.percall;
+					AggStatePerTrans pertrans = op->d.agg_presorted_distinctcheck.percall->pertrans;
 					int			jumpdistinct = op->d.agg_presorted_distinctcheck.jumpdistinct;
 
-					LLVMValueRef v_fn = llvm_pg_func(mod, "ExecEvalPreOrderedDistinctSingle");
-					LLVMValueRef v_args[2];
+					LLVMValueRef v_fn = llvm_pg_func(ecs.mod, "ExecEvalPreOrderedDistinctSingle");
+					LLVMValueRef v_args[3];
 					LLVMValueRef v_ret;
 
-					v_args[0] = l_ptr_const(aggstate, l_ptr(StructAggState));
-					v_args[1] = l_ptr_const(pertrans, l_ptr(StructAggStatePerTransData));
+					v_args[0] = l_ptr_const(percall, l_ptr(StructAggStatePerCallContext));
+					v_args[1] = l_ptr_const(aggstate, l_ptr(StructAggState));
+					v_args[2] = l_ptr_const(pertrans, l_ptr(StructAggStatePerTransData));
 
-					v_ret = LLVMBuildCall(b, v_fn, v_args, 2, "");
+					v_ret = LLVMBuildCall(b, v_fn, v_args, 3, "");
 					v_ret = LLVMBuildZExt(b, v_ret, TypeStorageBool, "");
 
 					LLVMBuildCondBr(b,
@@ -2623,17 +2625,19 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 			case EEOP_AGG_PRESORTED_DISTINCT_MULTI:
 				{
 					AggState   *aggstate = castNode(AggState, state->parent);
-					AggStatePerTrans pertrans = op->d.agg_presorted_distinctcheck.pertrans;
+					const AggStatePerCallContext *percall = op->d.agg_presorted_distinctcheck.percall;
+					AggStatePerTrans pertrans = op->d.agg_presorted_distinctcheck.percall->pertrans;
 					int			jumpdistinct = op->d.agg_presorted_distinctcheck.jumpdistinct;
 
-					LLVMValueRef v_fn = llvm_pg_func(mod, "ExecEvalPreOrderedDistinctMulti");
-					LLVMValueRef v_args[2];
+					LLVMValueRef v_fn = llvm_pg_func(ecs.mod, "ExecEvalPreOrderedDistinctMulti");
+					LLVMValueRef v_args[3];
 					LLVMValueRef v_ret;
 
-					v_args[0] = l_ptr_const(aggstate, l_ptr(StructAggState));
-					v_args[1] = l_ptr_const(pertrans, l_ptr(StructAggStatePerTransData));
+					v_args[0] = l_ptr_const(percall, l_ptr(StructAggStatePerCallContext));
+					v_args[1] = l_ptr_const(aggstate, l_ptr(StructAggState));
+					v_args[2] = l_ptr_const(pertrans, l_ptr(StructAggStatePerTransData));
 
-					v_ret = LLVMBuildCall(b, v_fn, v_args, 2, "");
+					v_ret = LLVMBuildCall(b, v_fn, v_args, 3, "");
 					v_ret = LLVMBuildZExt(b, v_ret, TypeStorageBool, "");
 
 					LLVMBuildCondBr(b,

@@ -35,6 +35,7 @@
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "executor/execExpr.h"
+#include "executor/nodeAgg.h"
 #include "executor/nodeSubplan.h"
 #include "funcapi.h"
 #include "jit/jit.h"
@@ -1482,9 +1483,9 @@ ExecInitExprRec(ExprStateBuilder *esb, Expr *node, RelNullableDatum result)
 					scratch.opcode = EEOP_HASHED_SCALARARRAYOP;
 					scratch.d.hashedscalararrayop.inclause = opexpr->useOr;
 					scratch.d.hashedscalararrayop.finfo = finfo;
-					scratch.d.hashedscalararrayop.fcinfo_data = fcinfo;
+					scratch.d.hashedscalararrayop.fcinfo_data = fcinfo_rel;
+					scratch.d.hashedscalararrayop.fn_addr = finfo->fn_addr;
 					scratch.d.hashedscalararrayop.saop = opexpr;
-
 
 					ExprEvalPushStep(esb, &scratch);
 				}
@@ -3731,6 +3732,7 @@ ExecBuildAggTrans(AggState *aggstate, AggStatePerPhase phase,
 				percall = makeNode(AggStatePerCallContext);
 				percall->aggstate = aggstate;
 				percall->pertrans = pertrans;
+				percall->aggcontext = aggstate->aggcontexts[0];
 
 				ds_fcinfo_rel =
 					ExprBuilderAllocFunctionCallInfo(&esb, numTransArgs,
@@ -3876,16 +3878,25 @@ ExecBuildAggTrans(AggState *aggstate, AggStatePerPhase phase,
 		/* Handle DISTINCT aggregates which have pre-sorted input */
 		if (pertrans->numDistinctCols > 0 && !pertrans->aggsortrequired)
 		{
+			AggStatePerCallContext *percall;
+
+			percall = makeNode(AggStatePerCallContext);
+			percall->aggstate = aggstate;
+			percall->pertrans = pertrans;
+			percall->aggcontext = aggstate->aggcontexts[0];
+			percall->setno = 0;
+
 			if (pertrans->numDistinctCols > 1)
 				scratch.opcode = EEOP_AGG_PRESORTED_DISTINCT_MULTI;
 			else
 				scratch.opcode = EEOP_AGG_PRESORTED_DISTINCT_SINGLE;
 
-			scratch.d.agg_presorted_distinctcheck.pertrans = pertrans;
+			scratch.d.agg_presorted_distinctcheck.percall = percall;
+			scratch.d.agg_presorted_distinctcheck.trans_fcinfo = trans_fcinfo_rel;
 			scratch.d.agg_presorted_distinctcheck.jumpdistinct = -1;	/* adjust later */
-			ExprEvalPushStep(state, &scratch);
+			ExprEvalPushStep(&esb, &scratch);
 			adjust_bailout = lappend_int(adjust_bailout,
-										 state->steps_len - 1);
+										 esb.steps_len - 1);
 		}
 
 		/*
@@ -3956,7 +3967,7 @@ ExecBuildAggTrans(AggState *aggstate, AggStatePerPhase phase,
 					 as->opcode == EEOP_AGG_PRESORTED_DISTINCT_MULTI)
 			{
 				Assert(as->d.agg_presorted_distinctcheck.jumpdistinct == -1);
-				as->d.agg_presorted_distinctcheck.jumpdistinct = state->steps_len;
+				as->d.agg_presorted_distinctcheck.jumpdistinct = esb.steps_len;
 			}
 			else
 				Assert(false);

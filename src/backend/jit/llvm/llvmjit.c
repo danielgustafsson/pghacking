@@ -87,6 +87,7 @@ LLVMTypeRef StructExprState;
 LLVMTypeRef StructAggState;
 LLVMTypeRef StructAggStatePerGroupData;
 LLVMTypeRef StructAggStatePerTransData;
+LLVMTypeRef StructAggStatePerCallContext;
 
 LLVMValueRef AttributeTemplate;
 

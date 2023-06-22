@@ -224,14 +224,11 @@ typedef struct ScalarArrayOpExprHashTable
 	FmgrInfo	hash_finfo;		/* function's lookup data */
 	FunctionCallInfoBaseData hash_fcinfo_data;	/* arguments etc */
 
-/*
 	PGFunction fn_addr;
 	FunctionCallInfo fcinfo;
 
 	PGFunction hash_fn_addr;
 	FunctionCallInfo hash_fcinfo;
-*/
-
 } ScalarArrayOpExprHashTable;
 
 /* Define parameters for ScalarArrayOpExpr hash table code generation. */
@@ -2069,10 +2066,13 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 
 		EEO_CASE(EEOP_AGG_PRESORTED_DISTINCT_SINGLE)
 		{
-			AggStatePerTrans pertrans = op->d.agg_presorted_distinctcheck.pertrans;
 			AggState   *aggstate = castNode(AggState, state->parent);
+			const AggStatePerCallContext *percall = op->d.agg_presorted_distinctcheck.percall;
+			AggStatePerTrans pertrans = percall->pertrans;
+			FunctionCallInfo fcinfo =
+				RELPTR_RESOLVE(data, op->d.agg_presorted_distinctcheck.trans_fcinfo);
 
-			if (ExecEvalPreOrderedDistinctSingle(aggstate, pertrans))
+			if (ExecEvalPreOrderedDistinctSingle(percall, aggstate, pertrans, fcinfo))
 				EEO_NEXT();
 			else
 				EEO_JUMP(op->d.agg_presorted_distinctcheck.jumpdistinct);
@@ -2081,9 +2081,12 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 		EEO_CASE(EEOP_AGG_PRESORTED_DISTINCT_MULTI)
 		{
 			AggState   *aggstate = castNode(AggState, state->parent);
-			AggStatePerTrans pertrans = op->d.agg_presorted_distinctcheck.pertrans;
+			const AggStatePerCallContext *percall = op->d.agg_presorted_distinctcheck.percall;
+			AggStatePerTrans pertrans = percall->pertrans;
+			FunctionCallInfo fcinfo =
+				RELPTR_RESOLVE(data, op->d.agg_presorted_distinctcheck.trans_fcinfo);
 
-			if (ExecEvalPreOrderedDistinctMulti(aggstate, pertrans))
+			if (ExecEvalPreOrderedDistinctMulti(percall, aggstate, pertrans, fcinfo))
 				EEO_NEXT();
 			else
 				EEO_JUMP(op->d.agg_presorted_distinctcheck.jumpdistinct);
@@ -3777,6 +3780,7 @@ saop_hash_element_match(struct saophash_hash *tb, Datum key1, Datum key2)
 	fcinfo->args[1].value = key2;
 	fcinfo->args[1].isnull = false;
 
+	/* XXX FIXME */
 	result = elements_tab->op->d.hashedscalararrayop.finfo->fn_addr(fcinfo);
 
 	return DatumGetBool(result);
@@ -3919,11 +3923,14 @@ ExecEvalHashedScalarArrayOp(ExprState *state, ExprEvalStep *op, ExprContext *eco
 	}
 	else
 	{
+#if 0
+		/* FIXME TODO: handle these */
 		Assert(elements_tab->fn_addr == op->d.hashedscalararrayop.fn_addr);
 		Assert(elements_tab->hash_fn_addr == op->d.hashedscalararrayop.hash_fn_addr);
 		Assert(elements_tab->hash_fcinfo == op->d.hashedscalararrayop.hash_fcinfo_data);
+#endif
 		/* fcinfo may be allocated on stack, so can't assume it stays constant */
-		elements_tab->fcinfo = fcinfo;
+		elements_tab->hash_fcinfo_data = *fcinfo;
 	}
 
 	/* Check the hash to see if we have a match. */
@@ -4689,6 +4696,7 @@ ExecAggInitGroup(const AggStatePerCallContext *percall, AggStatePerGroup pergrou
 				 FunctionCallInfo fcinfo)
 {
 	MemoryContext oldContext;
+	AggStatePerTrans pertrans = percall->pertrans;
 
 	/*
 	 * We must copy the datum into aggcontext if it is pass-by-ref. We do not
@@ -4699,8 +4707,8 @@ ExecAggInitGroup(const AggStatePerCallContext *percall, AggStatePerGroup pergrou
 	oldContext = MemoryContextSwitchTo(percall->aggcontext->ecxt_per_tuple_memory);
 	pergroup->transValue.value =
 		datumCopy(fcinfo->args[1].value,
-				  percall->pertrans->transtypeByVal,
-				  percall->pertrans->transtypeLen);
+				  pertrans->transtypeByVal,
+				  pertrans->transtypeLen);
 	pergroup->transValue.isnull = false;
 	pergroup->noTransValue = false;
 	MemoryContextSwitchTo(oldContext);
@@ -4751,7 +4759,7 @@ ExecAggCopyTransValue(const AggStatePerCallContext *percall,
 		MemoryContextSwitchTo(percall->aggcontext->ecxt_per_tuple_memory);
 		if (DatumIsReadWriteExpandedObject(newValue,
 										   false,
-										   percall->pertrans->transtypeLen) &&
+										   pertrans->transtypeLen) &&
 			MemoryContextGetParent(DatumGetEOHP(newValue)->eoh_context) == CurrentMemoryContext)
 			 /* do nothing */ ;
 		else
@@ -4789,10 +4797,11 @@ ExecAggCopyTransValue(const AggStatePerCallContext *percall,
  *		matches the previous input Datum.
  */
 bool
-ExecEvalPreOrderedDistinctSingle(AggState *aggstate, AggStatePerTrans pertrans)
+ExecEvalPreOrderedDistinctSingle(const AggStatePerCallContext *percall,
+								 AggState *aggstate, AggStatePerTrans pertrans, FunctionCallInfo fcinfo)
 {
-	Datum		value = pertrans->transfn_fcinfo->args[1].value;
-	bool		isnull = pertrans->transfn_fcinfo->args[1].isnull;
+	Datum		value = fcinfo->args[1].value;
+	bool		isnull = fcinfo->args[1].isnull;
 
 	if (!pertrans->haslast ||
 		pertrans->lastisnull != isnull ||
@@ -4809,7 +4818,7 @@ ExecEvalPreOrderedDistinctSingle(AggState *aggstate, AggStatePerTrans pertrans)
 		{
 			MemoryContext oldContext;
 
-			oldContext = MemoryContextSwitchTo(aggstate->curaggcontext->ecxt_per_tuple_memory);
+			oldContext = MemoryContextSwitchTo(percall->aggcontext->ecxt_per_tuple_memory);
 
 			pertrans->lastdatum = datumCopy(value, pertrans->inputtypeByVal,
 											pertrans->inputtypeLen);
@@ -4831,14 +4840,14 @@ ExecEvalPreOrderedDistinctSingle(AggState *aggstate, AggStatePerTrans pertrans)
  *		input and returns false when the input matches the previous input.
  */
 bool
-ExecEvalPreOrderedDistinctMulti(AggState *aggstate, AggStatePerTrans pertrans)
+ExecEvalPreOrderedDistinctMulti(const AggStatePerCallContext *percall, AggState *aggstate, AggStatePerTrans pertrans, FunctionCallInfo fcinfo)
 {
 	ExprContext *tmpcontext = aggstate->tmpcontext;
 
 	for (int i = 0; i < pertrans->numTransInputs; i++)
 	{
-		pertrans->sortslot->tts_values[i] = pertrans->transfn_fcinfo->args[i + 1].value;
-		pertrans->sortslot->tts_isnull[i] = pertrans->transfn_fcinfo->args[i + 1].isnull;
+		pertrans->sortslot->tts_values[i].value = fcinfo->args[i + 1].value;
+		pertrans->sortslot->tts_values[i].isnull = fcinfo->args[i + 1].isnull;
 	}
 
 	ExecClearTuple(pertrans->sortslot);
@@ -4951,9 +4960,9 @@ ExecAggPlainTransByRef(AggState *aggstate, const AggStatePerCallContext *percall
 	 * argument.
 	 */
 	if (DatumGetPointer(newVal) != DatumGetPointer(pergroup->transValue.value))
-		newVal = ExecAggCopyTransValue(percall
+		newVal = ExecAggCopyTransValue(percall,
 									   newVal, fcinfo->isnull,
-									   pergroup->transValue);
+									   &pergroup->transValue);
 
 	pergroup->transValue.value = newVal;
 	pergroup->transValue.isnull = fcinfo->isnull;
