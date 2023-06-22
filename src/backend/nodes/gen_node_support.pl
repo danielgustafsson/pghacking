@@ -194,6 +194,7 @@ my $next_input_file = 0;
 foreach my $infile (@ARGV)
 {
 	my $in_struct;
+	my $in_if_zero = 0;
 	my $subline;
 	my $is_node_struct;
 	my $supertype;
@@ -239,6 +240,22 @@ foreach my $infile (@ARGV)
 		chomp $line;
 		$line =~ s/\s*$//;
 		next if $line eq '';
+
+		if ($line =~ /^#if 0/)
+		{
+			$in_if_zero++;
+			next;
+		}
+
+		if ($in_if_zero)
+		{
+			if ($line =~ /^#endif/)
+			{
+				$in_if_zero--;
+			}
+			next;
+		}
+
 		next if $line =~ /^#(define|ifdef|endif)/;
 
 		# within a struct, don't process until we have whole logical line
@@ -436,7 +453,7 @@ foreach my $infile (@ARGV)
 			}
 			# normal struct field
 			elsif ($line =~
-				/^\s*(.+)\s*\b(\w+)(\[[\w\s+]+\])?\s*(?:pg_node_attr\(([\w(), ]*)\))?;/
+				/^\s*(.+)\s*\b(\w+)(\[[\w\s+]+\])*\s*(?:pg_node_attr\(([\w(), ]*)\))?;/
 			  )
 			{
 				if ($is_node_struct)
