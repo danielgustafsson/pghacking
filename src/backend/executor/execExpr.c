@@ -1068,8 +1068,11 @@ ExecReadyExprEmbedded(ExprStateBuilder *esb, size_t prefix)
 		}
 	}
 
+#if 0
+	/* TODO: crashing bug in jit_compile_expr */
 	if (jit_compile_expr(state, esb))
 		return p;
+#endif
 
 	ExecReadyInterpretedExpr(state, esb);
 
