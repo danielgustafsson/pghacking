@@ -770,10 +770,9 @@ logicalrep_write_tuple(StringInfo out, Relation rel, TupleTableSlot *slot,
 					   bool binary, Bitmapset *columns)
 {
 	TupleDesc	desc;
-	Datum	   *values;
-	bool	   *isnull;
 	int			i;
 	uint16		nliveatts = 0;
+	NullableDatum *datums;
 
 	desc = RelationGetDescr(rel);
 
@@ -792,8 +791,8 @@ logicalrep_write_tuple(StringInfo out, Relation rel, TupleTableSlot *slot,
 	pq_sendint16(out, nliveatts);
 
 	slot_getallattrs(slot);
-	values = &slot->tts_values->value;
-	isnull = &slot->tts_values->isnull;
+
+	datums = slot->tts_values;
 
 	/* Write the values */
 	for (i = 0; i < desc->natts; i++)
@@ -808,13 +807,13 @@ logicalrep_write_tuple(StringInfo out, Relation rel, TupleTableSlot *slot,
 		if (!column_in_column_list(att->attnum, columns))
 			continue;
 
-		if (isnull[i])
+		if (datums[i].isnull)
 		{
 			pq_sendbyte(out, LOGICALREP_COLUMN_NULL);
 			continue;
 		}
 
-		if (att->attlen == -1 && VARATT_IS_EXTERNAL_ONDISK(values[i]))
+		if (att->attlen == -1 && VARATT_IS_EXTERNAL_ONDISK(datums[i].value))
 		{
 			/*
 			 * Unchanged toasted datum.  (Note that we don't promise to detect
@@ -839,7 +838,7 @@ logicalrep_write_tuple(StringInfo out, Relation rel, TupleTableSlot *slot,
 			int			len;
 
 			pq_sendbyte(out, LOGICALREP_COLUMN_BINARY);
-			outputbytes = OidSendFunctionCall(typclass->typsend, values[i]);
+			outputbytes = OidSendFunctionCall(typclass->typsend, datums[i].value);
 			len = VARSIZE(outputbytes) - VARHDRSZ;
 			pq_sendint(out, len, 4);	/* length */
 			pq_sendbytes(out, VARDATA(outputbytes), len);	/* data */
@@ -850,7 +849,7 @@ logicalrep_write_tuple(StringInfo out, Relation rel, TupleTableSlot *slot,
 			char	   *outputstr;
 
 			pq_sendbyte(out, LOGICALREP_COLUMN_TEXT);
-			outputstr = OidOutputFunctionCall(typclass->typoutput, values[i]);
+			outputstr = OidOutputFunctionCall(typclass->typoutput, datums[i].value);
 			pq_sendcountedtext(out, outputstr, strlen(outputstr), false);
 			pfree(outputstr);
 		}

@@ -810,7 +810,7 @@ typedef struct SubscriptingRefState
 typedef struct SubscriptExecSteps
 {
 	/* See nodes/subscripting.h for more detail about these */
-	ExecEvalSubscriptCallback sbs_check_subscripts;	/* process subscripts */
+	ExecEvalSubscriptCheckCallback sbs_check_subscripts;	/* process subscripts */
 	ExecEvalSubscriptCallback sbs_fetch;	/* fetch an element */
 	ExecEvalSubscriptCallback sbs_assign;	/* assign to an element */
 	ExecEvalSubscriptCallback sbs_fetch_old;	/* fetch old value for assignment */

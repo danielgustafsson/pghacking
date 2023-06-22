@@ -1070,7 +1070,7 @@ ExecReadyExprEmbedded(ExprStateBuilder *esb, size_t prefix)
 		}
 	}
 
-#if 0
+#if 1
 	/* TODO: crashing bug in jit_compile_expr */
 	if (jit_compile_expr(state, esb))
 		return p;
@@ -2126,7 +2126,7 @@ ExecInitExprRec(ExprStateBuilder *esb, Expr *node, RelNullableDatum result)
 				scratch.d.row.elements =
 					ExprBuilderAllocNullableDatumArrayInit(esb, nelems, &elements);
 				/* as explained above, make sure any extra columns are null */
-				for (int i = 0; i < nelems; i++)
+				for (i = 0; i < nelems; i++)
 					elements[i] = NULL_DATUM;
 
 				/* Set up evaluation, skipping any deleted columns */

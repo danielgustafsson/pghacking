@@ -868,7 +868,7 @@ NextCopyFrom(CopyFromState cstate, ExprContext *econtext,
 	attr_count = list_length(cstate->attnumlist);
 
 	/* Initialize all values for row to NULL */
-	for (int i = 0; i < num_phys_attrs; i++)
+	for (i = 0; i < num_phys_attrs; i++)
 	{
 		values[i].value = (Datum) 0;
 		values[i].isnull = true;

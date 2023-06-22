@@ -1125,6 +1125,7 @@ llvm_create_types(void)
 	StructAggState = llvm_pg_var_type("StructAggState");
 	StructAggStatePerGroupData = llvm_pg_var_type("StructAggStatePerGroupData");
 	StructAggStatePerTransData = llvm_pg_var_type("StructAggStatePerTransData");
+	StructAggStatePerCallContext = llvm_pg_var_type("StructAggStatePerCallContext");
 
 	AttributeTemplate = LLVMGetNamedFunction(llvm_types_module, "AttributeTemplate");
 }

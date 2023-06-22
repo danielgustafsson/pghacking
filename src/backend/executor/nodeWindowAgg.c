@@ -636,6 +636,7 @@ finalize_windowaggregate(WindowAggState *winstate,
 			MakeExpandedObjectReadOnly(peraggstate->transValue.value,
 									   peraggstate->transValue.isnull,
 									   peraggstate->transtypeLen);
+		result->isnull = peraggstate->transValue.isnull;
 	}
 
 	MemoryContextSwitchTo(oldContext);

@@ -323,9 +323,9 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 		LLVMSetCurrentDebugLocation2(b, l2);
 	}
 
-	ecs.v_steps = LLVMBuildStructGEP(b, ecs.v_state,
+	ecs.v_steps = LLVMBuildLoad(b, LLVMBuildStructGEP(b, ecs.v_state,
 									 FIELDNO_EXPRSTATE_STEPS,
-									 "v.state.steps");
+													  "v.state.steps"), "");
 
 	/* allocate blocks for each op upfront, so we can do jumps easily */
 	opblocks = palloc(sizeof(LLVMBasicBlockRef) * state->steps_final_len);
@@ -2602,16 +2602,21 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 					const AggStatePerCallContext *percall = op->d.agg_presorted_distinctcheck.percall;
 					AggStatePerTrans pertrans = op->d.agg_presorted_distinctcheck.percall->pertrans;
 					int			jumpdistinct = op->d.agg_presorted_distinctcheck.jumpdistinct;
+					FunctionCallInfo fcinfo;
 
 					LLVMValueRef v_fn = llvm_pg_func(ecs.mod, "ExecEvalPreOrderedDistinctSingle");
-					LLVMValueRef v_args[3];
+					LLVMValueRef v_args[4];
 					LLVMValueRef v_ret;
+					LLVMValueRef v_fcinfo;
+
+					v_fcinfo = expr_fcinfo_ref(&ecs, op->d.agg_trans.trans_fcinfo, &fcinfo);
 
 					v_args[0] = l_ptr_const(percall, l_ptr(StructAggStatePerCallContext));
 					v_args[1] = l_ptr_const(aggstate, l_ptr(StructAggState));
 					v_args[2] = l_ptr_const(pertrans, l_ptr(StructAggStatePerTransData));
+					v_args[3] = v_fcinfo;
 
-					v_ret = LLVMBuildCall(b, v_fn, v_args, 3, "");
+					v_ret = LLVMBuildCall(b, v_fn, v_args, 4, "");
 					v_ret = LLVMBuildZExt(b, v_ret, TypeStorageBool, "");
 
 					LLVMBuildCondBr(b,
@@ -2628,16 +2633,23 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 					const AggStatePerCallContext *percall = op->d.agg_presorted_distinctcheck.percall;
 					AggStatePerTrans pertrans = op->d.agg_presorted_distinctcheck.percall->pertrans;
 					int			jumpdistinct = op->d.agg_presorted_distinctcheck.jumpdistinct;
+					FunctionCallInfo fcinfo;
+
 
 					LLVMValueRef v_fn = llvm_pg_func(ecs.mod, "ExecEvalPreOrderedDistinctMulti");
-					LLVMValueRef v_args[3];
+					LLVMValueRef v_args[4];
 					LLVMValueRef v_ret;
+					LLVMValueRef v_fcinfo;
+
+					v_fcinfo = expr_fcinfo_ref(&ecs, op->d.agg_trans.trans_fcinfo, &fcinfo);
+
 
 					v_args[0] = l_ptr_const(percall, l_ptr(StructAggStatePerCallContext));
 					v_args[1] = l_ptr_const(aggstate, l_ptr(StructAggState));
 					v_args[2] = l_ptr_const(pertrans, l_ptr(StructAggStatePerTransData));
+					v_args[3] = v_fcinfo;
 
-					v_ret = LLVMBuildCall(b, v_fn, v_args, 3, "");
+					v_ret = LLVMBuildCall(b, v_fn, v_args, 4, "");
 					v_ret = LLVMBuildZExt(b, v_ret, TypeStorageBool, "");
 
 					LLVMBuildCondBr(b,
@@ -3190,9 +3202,7 @@ expr_opp(ExprCompileState *ecs, int opno)
 {
 	LLVMValueRef v_opno = l_int32_const(opno);
 
-	//return LLVMBuildGEP(ecs->b, ecs->v_steps, &v_opno, 1, "");
-	return LLVMBuildGEP(ecs->b, ecs->v_steps,
-						(LLVMValueRef[]){l_int32_const(0), v_opno}, 2, "");
+	return LLVMBuildGEP(ecs->b, ecs->v_steps, &v_opno, 1, "");
 }
 
 static LLVMValueRef

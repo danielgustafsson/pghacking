@@ -222,13 +222,13 @@ typedef struct ScalarArrayOpExprHashTable
 	saophash_hash *hashtab;		/* underlying hash table */
 	struct ExprEvalStep *op;
 	FmgrInfo	hash_finfo;		/* function's lookup data */
-	FunctionCallInfoBaseData hash_fcinfo_data;	/* arguments etc */
 
 	PGFunction fn_addr;
 	FunctionCallInfo fcinfo;
 
 	PGFunction hash_fn_addr;
 	FunctionCallInfo hash_fcinfo;
+	FunctionCallInfoBaseData hash_fcinfo_data;	/* arguments etc */
 } ScalarArrayOpExprHashTable;
 
 /* Define parameters for ScalarArrayOpExpr hash table code generation. */
@@ -712,6 +712,7 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 			Assert(resultnum >= 0 && resultnum < resultslot->tts_tupleDescriptor->natts);
 
 			result = RELPTR_RESOLVE(data, op->result);
+			resultslot->tts_values[resultnum] = *result;
 			resultslot->tts_values[resultnum] = *result;
 
 			EEO_NEXT();
@@ -3860,6 +3861,7 @@ ExecEvalHashedScalarArrayOp(ExprState *state, ExprEvalStep *op, ExprContext *eco
 		elements_tab->fcinfo = fcinfo;
 		elements_tab->hash_fn_addr = op->d.hashedscalararrayop.hash_fn_addr;
 		elements_tab->hash_fcinfo = op->d.hashedscalararrayop.hash_fcinfo_data;
+		elements_tab->op = op;
 
 		fmgr_info(saop->hashfuncid, &elements_tab->hash_finfo);
 		fmgr_info_set_expr((Node *) saop, &elements_tab->hash_finfo);
@@ -3930,7 +3932,7 @@ ExecEvalHashedScalarArrayOp(ExprState *state, ExprEvalStep *op, ExprContext *eco
 		Assert(elements_tab->hash_fcinfo == op->d.hashedscalararrayop.hash_fcinfo_data);
 #endif
 		/* fcinfo may be allocated on stack, so can't assume it stays constant */
-		elements_tab->hash_fcinfo_data = *fcinfo;
+		elements_tab->fcinfo = fcinfo;
 	}
 
 	/* Check the hash to see if we have a match. */

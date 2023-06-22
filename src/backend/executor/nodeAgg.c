@@ -1184,6 +1184,7 @@ finalize_partialaggregate(AggState *aggstate,
 	}
 	else
 	{
+		result->isnull = pergroupstate->transValue.isnull;
 		result->value = MakeExpandedObjectReadOnly(pergroupstate->transValue.value,
 												   pergroupstate->transValue.isnull,
 												   pertrans->transtypeLen);

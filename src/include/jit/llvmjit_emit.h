@@ -24,7 +24,7 @@
  * Emit a non-LLVM pointer as an LLVM constant.
  */
 static inline LLVMValueRef
-l_ptr_const(void *ptr, LLVMTypeRef type)
+l_ptr_const(const void *ptr, LLVMTypeRef type)
 {
 	LLVMValueRef c = LLVMConstInt(TypeSizeT, (uintptr_t) ptr, false);
 
