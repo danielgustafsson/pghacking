@@ -73,7 +73,7 @@ static void ExecInitFunc(ExprEvalStep *scratch, Expr *node, List *args,
 static void ExecCreateExprSetupSteps(ExprStateBuilder *esb, Node *node);
 static void ExecPushExprSetupSteps(ExprStateBuilder *esb, ExprSetupInfo *info);
 static bool expr_setup_walker(Node *node, ExprSetupInfo *info);
-static bool ExprEvalPushStep(ExprStateBuilder *esb, const ExprEvalStep *s);
+static void ExprEvalPushStep(ExprStateBuilder *esb, const ExprEvalStep *s);
 static bool ExecComputeSlotInfo(ExprStateBuilder *esb, ExprEvalStep *op);
 static void ExecInitWholeRowVar(ExprEvalStep *scratch, Var *variable,
 								ExprStateBuilder *esb);
@@ -1011,8 +1011,8 @@ ExecReadyExprEmbedded(ExprStateBuilder *esb, size_t prefix)
 	sz =
 		/* size of struct this is embedded in, needs to be trailing */
 		prefix +
-		/* space for expression steps */
-		offsetof(ExprState, steps) * esb->steps_len * sizeof(ExprEvalStep) +
+		/* pointer to expression steps array */
+		sizeof(ExprState) +
 		/* space for mutable data */
 		esb->allocation_size;
 
@@ -1031,7 +1031,8 @@ ExecReadyExprEmbedded(ExprStateBuilder *esb, size_t prefix)
 	state->parent = esb->parent;
 	state->flags = esb->flags;
 	state->steps_final_len = esb->steps_len;
-	state->mutable_off = offsetof(ExprState, steps) * esb->steps_len * sizeof(ExprEvalStep);
+	state->steps = palloc(esb->steps_len * sizeof(ExprEvalStep));
+	state->mutable_off = offsetof(ExprState, steps) + sizeof(void *);
 
 	/* copy in step data */
 	{
@@ -1040,7 +1041,7 @@ ExecReadyExprEmbedded(ExprStateBuilder *esb, size_t prefix)
 
 		foreach(lc, esb->steps)
 		{
-			memcpy(&state->steps[off], lfirst(lc), sizeof(ExprEvalStep));
+			memcpy(&(state->steps[off]), lfirst(lc), sizeof(ExprEvalStep));
 			off++;
 		}
 	}
@@ -2728,30 +2729,11 @@ ExecInitExprRec(ExprStateBuilder *esb, Expr *node, RelNullableDatum result)
 
 /*
  * Add another expression evaluation step to ExprStateBuilder->steps.
- *
- * Note that this potentially re-allocates es->steps, therefore no pointer
- * into that array may be used while the expression is still being built.
  */
 static void
 ExprEvalPushStep(ExprStateBuilder *esb, const ExprEvalStep *s)
 {
 	ExprEvalStep *as;
-
-#if 0
-	if (esb->steps_alloc == 0)
-	{
-		esb->steps_alloc = 16;
-		esb->steps = palloc(sizeof(ExprEvalStep) * esb->steps_alloc);
-	}
-	else if (esb->steps_alloc == esb->steps_len)
-	{
-		esb->steps_alloc *= 2;
-		esb->steps = repalloc(esb->steps,
-							  sizeof(ExprEvalStep) * esb->steps_alloc);
-	}
-
-	memcpy(&esb->steps[esb->steps_len++], s, sizeof(ExprEvalStep));
-#endif
 
 	as = palloc(sizeof(ExprEvalStep));
 	memcpy(as, s, sizeof(ExprEvalStep));
