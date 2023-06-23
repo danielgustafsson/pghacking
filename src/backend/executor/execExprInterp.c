@@ -220,14 +220,10 @@ static uint32 saop_element_hash(struct saophash_hash *tb, Datum key);
 typedef struct ScalarArrayOpExprHashTable
 {
 	saophash_hash *hashtab;		/* underlying hash table */
-	struct ExprEvalStep *op;
 	FmgrInfo	hash_finfo;		/* function's lookup data */
 
-	PGFunction fn_addr;
-	FunctionCallInfo fcinfo;
-
-	PGFunction hash_fn_addr;
-	FunctionCallInfo hash_fcinfo;
+	PGFunction match_fn_addr;
+	FunctionCallInfo match_fcinfo;
 	FunctionCallInfoBaseData hash_fcinfo_data;	/* arguments etc */
 } ScalarArrayOpExprHashTable;
 
@@ -3774,7 +3770,7 @@ saop_hash_element_match(struct saophash_hash *tb, Datum key1, Datum key2)
 	Datum		result;
 
 	ScalarArrayOpExprHashTable *elements_tab = (ScalarArrayOpExprHashTable *) tb->private_data;
-	FunctionCallInfo fcinfo = elements_tab->fcinfo;
+	FunctionCallInfo fcinfo = elements_tab->match_fcinfo;
 
 	fcinfo->args[0].value = key1;
 	fcinfo->args[0].isnull = false;
@@ -3782,7 +3778,7 @@ saop_hash_element_match(struct saophash_hash *tb, Datum key1, Datum key2)
 	fcinfo->args[1].isnull = false;
 
 	/* XXX FIXME */
-	result = elements_tab->op->d.hashedscalararrayop.finfo->fn_addr(fcinfo);
+	result = elements_tab->match_fn_addr(fcinfo);
 
 	return DatumGetBool(result);
 }
@@ -3857,11 +3853,9 @@ ExecEvalHashedScalarArrayOp(ExprState *state, ExprEvalStep *op, ExprContext *eco
 			palloc0(offsetof(ScalarArrayOpExprHashTable, hash_fcinfo_data) +
 					SizeForFunctionCallInfo(1));
 		op->d.hashedscalararrayop.elements_tab = elements_tab;
-		elements_tab->fn_addr = op->d.hashedscalararrayop.fn_addr;
-		elements_tab->fcinfo = fcinfo;
-		elements_tab->hash_fn_addr = op->d.hashedscalararrayop.hash_fn_addr;
-		elements_tab->hash_fcinfo = op->d.hashedscalararrayop.hash_fcinfo_data;
-		elements_tab->op = op;
+
+		elements_tab->match_fn_addr = fcinfo->flinfo->fn_addr;
+		elements_tab->match_fcinfo = fcinfo;
 
 		fmgr_info(saop->hashfuncid, &elements_tab->hash_finfo);
 		fmgr_info_set_expr((Node *) saop, &elements_tab->hash_finfo);
@@ -3932,7 +3926,7 @@ ExecEvalHashedScalarArrayOp(ExprState *state, ExprEvalStep *op, ExprContext *eco
 		Assert(elements_tab->hash_fcinfo == op->d.hashedscalararrayop.hash_fcinfo_data);
 #endif
 		/* fcinfo may be allocated on stack, so can't assume it stays constant */
-		elements_tab->fcinfo = fcinfo;
+		elements_tab->match_fcinfo = fcinfo;
 	}
 
 	/* Check the hash to see if we have a match. */

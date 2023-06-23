@@ -1484,7 +1484,6 @@ ExecInitExprRec(ExprStateBuilder *esb, Expr *node, RelNullableDatum result)
 					scratch.d.hashedscalararrayop.inclause = opexpr->useOr;
 					scratch.d.hashedscalararrayop.finfo = finfo;
 					scratch.d.hashedscalararrayop.fcinfo_data = fcinfo_rel;
-					scratch.d.hashedscalararrayop.fn_addr = finfo->fn_addr;
 					scratch.d.hashedscalararrayop.saop = opexpr;
 
 					ExprEvalPushStep(esb, &scratch);

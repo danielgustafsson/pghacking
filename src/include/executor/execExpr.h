@@ -612,12 +612,6 @@ typedef struct ExprEvalStep
 			FmgrInfo   *finfo;	/* function's lookup data */
 			RelFunctionCallInfo fcinfo_data;	/* arguments etc */
 			ScalarArrayOpExpr *saop;
-			/* faster to access without additional indirection: */
-			PGFunction	fn_addr;	/* actual call address */
-			FmgrInfo   *hash_finfo; /* function's lookup data */
-			FunctionCallInfo hash_fcinfo_data;	/* arguments etc */
-			/* faster to access without additional indirection: */
-			PGFunction	hash_fn_addr;	/* actual call address */
 		}			hashedscalararrayop;
 
 		/* for EEOP_XMLEXPR */
