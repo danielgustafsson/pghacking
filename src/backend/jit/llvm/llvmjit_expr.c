@@ -2150,7 +2150,10 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 			case EEOP_JSON_CONSTRUCTOR:
 				build_EvalXFunc(&ecs, "ExecEvalJsonConstructor",
 								expr_opp(&ecs, opno),
-								v_resultp);
+								ecs.v_econtext,
+								v_resultp,
+								expr_nullable_datum_array_ref(&ecs, op->d.json_constructor.jcstate->arg_values),
+					);
 				LLVMBuildBr(b, opblocks[opno + 1]);
 				break;
 
