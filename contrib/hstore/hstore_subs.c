@@ -91,11 +91,14 @@ hstore_subscript_transform(SubscriptingRef *sbsref,
  * upperindex[] array.
  */
 static void
-hstore_subscript_fetch(ExprState *state,
-					   ExprEvalStep *op,
-					   ExprContext *econtext)
+hstore_subscript_fetch(ExprContext *econtext,
+					   SubscriptingRefState *sbsrefstate,
+					   NullableDatum *lowerindex,
+					   NullableDatum *upperindex,
+					   NullableDatum *replace,
+					   NullableDatum *prev,
+					   NullableDatum *result)
 {
-	SubscriptingRefState *sbsrefstate = op->d.sbsref.state;
 	HStore	   *hs;
 	text	   *key;
 	HEntry	   *entries;
@@ -103,18 +106,18 @@ hstore_subscript_fetch(ExprState *state,
 	text	   *out;
 
 	/* Should not get here if source hstore is null */
-	Assert(!(*op->resnull));
+	Assert(!(result->isnull));
 
 	/* Check for null subscript */
-	if (sbsrefstate->upperindexnull[0])
+	if (upperindex[0].isnull)
 	{
-		*op->resnull = true;
+		result->isnull = true;
 		return;
 	}
 
 	/* OK, fetch/detoast the hstore and subscript */
-	hs = DatumGetHStoreP(*op->resvalue);
-	key = DatumGetTextPP(sbsrefstate->upperindex[0]);
+	hs = DatumGetHStoreP(result->value);
+	key = DatumGetTextPP(upperindex[0].value);
 
 	/* The rest is basically the same as hstore_fetchval() */
 	entries = ARRPTR(hs);
@@ -123,14 +126,14 @@ hstore_subscript_fetch(ExprState *state,
 
 	if (idx < 0 || HSTORE_VALISNULL(entries, idx))
 	{
-		*op->resnull = true;
+		result->isnull = true;
 		return;
 	}
 
 	out = cstring_to_text_with_len(HSTORE_VAL(entries, STRPTR(hs), idx),
 								   HSTORE_VALLEN(entries, idx));
 
-	*op->resvalue = PointerGetDatum(out);
+	result->value = PointerGetDatum(out);
 }
 
 /*
@@ -140,44 +143,47 @@ hstore_subscript_fetch(ExprState *state,
  * SubscriptingRefState's replacevalue/replacenull.
  */
 static void
-hstore_subscript_assign(ExprState *state,
-						ExprEvalStep *op,
-						ExprContext *econtext)
+hstore_subscript_assign(ExprContext *econtext,
+						SubscriptingRefState *sbsrefstate,
+						NullableDatum *lowerindex,
+						NullableDatum *upperindex,
+						NullableDatum *replace,
+						NullableDatum *prev,
+						NullableDatum *result)
 {
-	SubscriptingRefState *sbsrefstate = op->d.sbsref.state;
 	text	   *key;
 	Pairs		p;
 	HStore	   *out;
 
 	/* Check for null subscript */
-	if (sbsrefstate->upperindexnull[0])
+	if (upperindex[0].isnull)
 		ereport(ERROR,
 				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 				 errmsg("hstore subscript in assignment must not be null")));
 
 	/* OK, fetch/detoast the subscript */
-	key = DatumGetTextPP(sbsrefstate->upperindex[0]);
+	key = DatumGetTextPP(upperindex[0].value);
 
 	/* Create a Pairs entry for subscript + replacement value */
 	p.needfree = false;
 	p.key = VARDATA_ANY(key);
 	p.keylen = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(key));
 
-	if (sbsrefstate->replacenull)
+	if (replace->isnull)
 	{
 		p.vallen = 0;
 		p.isnull = true;
 	}
 	else
 	{
-		text	   *val = DatumGetTextPP(sbsrefstate->replacevalue);
+		text	   *val = DatumGetTextPP(replace->value);
 
 		p.val = VARDATA_ANY(val);
 		p.vallen = hstoreCheckValLen(VARSIZE_ANY_EXHDR(val));
 		p.isnull = false;
 	}
 
-	if (*op->resnull)
+	if (result->isnull)
 	{
 		/* Just build a one-element hstore (cf. hstore_from_text) */
 		out = hstorePairs(&p, 1, p.keylen + p.vallen);
@@ -188,7 +194,7 @@ hstore_subscript_assign(ExprState *state,
 		 * Otherwise, merge the new key into the hstore.  Based on
 		 * hstore_concat.
 		 */
-		HStore	   *hs = DatumGetHStoreP(*op->resvalue);
+		HStore	   *hs = DatumGetHStoreP(result->value);
 		int			s1count = HS_COUNT(hs);
 		int			outcount = 0;
 		int			vsize;
@@ -253,8 +259,8 @@ hstore_subscript_assign(ExprState *state,
 		HS_FINALIZE(out, outcount, bufd, pd);
 	}
 
-	*op->resvalue = PointerGetDatum(out);
-	*op->resnull = false;
+	result->value = PointerGetDatum(out);
+	result->isnull = false;
 }
 
 /*
