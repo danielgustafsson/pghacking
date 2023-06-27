@@ -64,6 +64,7 @@ my @all_input_files = qw(
   commands/event_trigger.h
   commands/trigger.h
   executor/tuptable.h
+  executor/execExpr.h
   foreign/fdwapi.h
   nodes/bitmapset.h
   nodes/extensible.h
@@ -88,6 +89,7 @@ my @nodetag_only_files = qw(
   commands/event_trigger.h
   commands/trigger.h
   executor/tuptable.h
+  executor/execExpr.h
   foreign/fdwapi.h
   nodes/lockoptions.h
   nodes/miscnodes.h

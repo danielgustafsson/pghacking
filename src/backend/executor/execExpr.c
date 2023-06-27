@@ -1012,8 +1012,8 @@ ExecReadyExprEmbedded(ExprStateBuilder *esb, size_t prefix)
 	sz =
 		/* size of struct this is embedded in, needs to be trailing */
 		prefix +
-		/* pointer to expression steps array */
-		sizeof(ExprState) +
+		/* space for expression steps */
+		offsetof(ExprState, steps) + (esb->steps_len * sizeof(ExprEvalStep)) +
 		/* space for mutable data */
 		esb->allocation_size;
 
@@ -1032,8 +1032,7 @@ ExecReadyExprEmbedded(ExprStateBuilder *esb, size_t prefix)
 	state->parent = esb->parent;
 	state->flags = esb->flags;
 	state->steps_final_len = esb->steps_len;
-	state->steps = palloc(esb->steps_len * sizeof(ExprEvalStep));
-	state->mutable_off = offsetof(ExprState, steps) + sizeof(void *);
+	state->mutable_off = offsetof(ExprState, steps) + (esb->steps_len * sizeof(ExprEvalStep));
 
 	/* copy in step data */
 	{
@@ -1042,7 +1041,7 @@ ExecReadyExprEmbedded(ExprStateBuilder *esb, size_t prefix)
 
 		foreach(lc, esb->steps)
 		{
-			memcpy(&(state->steps[off]), lfirst(lc), sizeof(ExprEvalStep));
+			memcpy(&state->steps[off], lfirst(lc), sizeof(ExprEvalStep));
 			off++;
 		}
 	}

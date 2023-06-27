@@ -53,6 +53,7 @@ node_headers = \
 	commands/event_trigger.h \
 	commands/trigger.h \
 	executor/tuptable.h \
+	executor/execExpr.h \
 	foreign/fdwapi.h \
 	nodes/bitmapset.h \
 	nodes/extensible.h \

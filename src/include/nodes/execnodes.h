@@ -59,10 +59,8 @@ struct ExprEvalStep;			/* avoid including execExpr.h everywhere */
 struct CopyMultiInsertBuffer;
 struct LogicalTapeSet;
 
-
 typedef struct ExprState ExprState;
 typedef struct ProjectionInfo ProjectionInfo;
-
 
 /* ----------------
  *	  IndexInfo information
@@ -2349,74 +2347,6 @@ typedef struct AggState
 										 * ->hash_pergroup */
 	SharedAggInfo *shared_info; /* one entry per worker */
 } AggState;
-
-typedef Datum (*ExprStateEvalFunc) (struct ExprState *expression,
-									struct ExprContext *econtext,
-									bool *isNull);
-
-typedef struct ExprState
-{
-	NodeTag		type;
-
-	uint8		flags;			/* bitmask of EEO_FLAG_* bits, see above */
-
-	/*
-	 * Function that actually evaluates the expression.  This can be set to
-	 * different values depending on the complexity of the expression.
-	 */
-	ExprStateEvalFunc evalfunc;
-
-
-	/* private state for an evalfunc */
-	void	   *evalfunc_private;
-
-	/*
-	 * If projecting a tuple result, this slot holds the result; else NULL.
-	 */
-#define FIELDNO_EXPRSTATE_RESULTSLOT 4
-	TupleTableSlot *resultslot;
-
-	/* original expression tree, for debugging only */
-	Expr	   *expr;
-
-	uint32		mutable_off;
-	int			steps_final_len;		/* number of steps */
-
-#define FIELDNO_EXPRSTATE_PARENT 8
-	struct PlanState *parent;	/* parent PlanState node, if any */
-
-	/*
-	 * Instructions to compute expression's return value.
-	 */
-#define FIELDNO_EXPRSTATE_STEPS 9
-	struct ExprEvalStep *steps;
-	/* steps follow */
-	/* data follows */
-} ExprState;
-
-/* ----------------
- *		ProjectionInfo node information
- *
- *		This is all the information needed to perform projections ---
- *		that is, form new tuples by evaluation of targetlist expressions.
- *		Nodes which need to do projections create one of these.
- *
- *		The target tuple slot is kept in ProjectionInfo->pi_state.resultslot.
- *		ExecProject() evaluates the tlist, forms a tuple, and stores it
- *		in the given slot.  Note that the result will be a "virtual" tuple
- *		unless ExecMaterializeSlot() is then called to force it to be
- *		converted to a physical tuple.  The slot must have a tupledesc
- *		that matches the output of the tlist!
- * ----------------
- */
-typedef struct ProjectionInfo
-{
-	NodeTag		type;
-	/* expression context in which to evaluate expression */
-	ExprContext *pi_exprContext;
-	/* instructions to evaluate projection */
-	ExprState	pi_state;
-} ProjectionInfo;
 
 /*
  * AggStatePerCallContext - per agg related function invocation
