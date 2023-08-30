@@ -71,6 +71,7 @@ extern PGDLLIMPORT LLVMTypeRef StructTupleTableSlot;
 extern PGDLLIMPORT LLVMTypeRef StructHeapTupleTableSlot;
 extern PGDLLIMPORT LLVMTypeRef StructMinimalTupleTableSlot;
 extern PGDLLIMPORT LLVMTypeRef StructMemoryContextData;
+extern PGDLLIMPORT LLVMTypeRef StructFmgrInfo;
 extern PGDLLIMPORT LLVMTypeRef StructFunctionCallInfoData;
 extern PGDLLIMPORT LLVMTypeRef StructExprContext;
 extern PGDLLIMPORT LLVMTypeRef StructExprEvalStep;
@@ -101,7 +102,7 @@ extern void llvm_copy_attributes(LLVMValueRef from, LLVMValueRef to);
 extern LLVMValueRef llvm_function_reference(LLVMJitContext *context,
 						LLVMBuilderRef builder,
 						LLVMModuleRef mod,
-						FunctionCallInfo fcinfo);
+						FmgrInfo *finfo);
 
 extern void llvm_inline(LLVMModuleRef mod);
 

@@ -509,13 +509,13 @@ llvm_copy_attributes(LLVMValueRef v_from, LLVMValueRef v_to)
 }
 
 /*
- * Return a callable LLVMValueRef for fcinfo.
+ * Return a callable LLVMValueRef for flinfo.
  */
 LLVMValueRef
 llvm_function_reference(LLVMJitContext *context,
 						LLVMBuilderRef builder,
 						LLVMModuleRef mod,
-						FunctionCallInfo fcinfo)
+						FmgrInfo *flinfo)
 {
 	char	   *modname;
 	char	   *basename;
@@ -523,7 +523,7 @@ llvm_function_reference(LLVMJitContext *context,
 
 	LLVMValueRef v_fn;
 
-	fmgr_symbol(fcinfo->flinfo->fn_oid, &modname, &basename);
+	fmgr_symbol(flinfo->fn_oid, &modname, &basename);
 
 	if (modname != NULL && basename != NULL)
 	{
@@ -545,12 +545,12 @@ llvm_function_reference(LLVMJitContext *context,
 		LLVMValueRef v_fn_addr;
 
 		funcname = psprintf("pgoidextern.%u",
-							fcinfo->flinfo->fn_oid);
+							flinfo->fn_oid);
 		v_fn = LLVMGetNamedGlobal(mod, funcname);
 		if (v_fn != 0)
 			return LLVMBuildLoad(builder, v_fn, "");
 
-		v_fn_addr = l_ptr_const(fcinfo->flinfo->fn_addr, TypePGFunction);
+		v_fn_addr = l_ptr_const(flinfo->fn_addr, TypePGFunction);
 
 		v_fn = LLVMAddGlobal(mod, TypePGFunction, funcname);
 		LLVMSetInitializer(v_fn, v_fn_addr);
@@ -1115,6 +1115,7 @@ llvm_create_types(void)
 	StructExprContext = llvm_pg_var_type("StructExprContext");
 	StructExprEvalStep = llvm_pg_var_type("StructExprEvalStep");
 	StructExprState = llvm_pg_var_type("StructExprState");
+	StructFmgrInfo = llvm_pg_var_type("StructFmgrInfo");
 	StructFunctionCallInfoData = llvm_pg_var_type("StructFunctionCallInfoData");
 	StructMemoryContextData = llvm_pg_var_type("StructMemoryContextData");
 	StructTupleTableSlot = llvm_pg_var_type("StructTupleTableSlot");

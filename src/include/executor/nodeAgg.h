@@ -15,6 +15,7 @@
 #define NODEAGG_H
 
 #include "access/parallel.h"
+#include "executor/execExpr.h"
 #include "nodes/execnodes.h"
 
 
