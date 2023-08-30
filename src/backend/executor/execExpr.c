@@ -127,7 +127,8 @@ ExprBuilderAllocNullableDatum(ExprStateBuilder *esb)
 static RelBool
 ExprBuilderAllocBool(ExprStateBuilder *esb)
 {
-	ExprStateAllocation *alloc = ExprBuilderAllocInternal(esb, ERP_BOOL, sizeof(NullableDatum));
+	ExprStateAllocation *alloc =
+		ExprBuilderAllocInternal(esb, ERP_BOOL, sizeof(NullableDatum));
 
 	return (RelBool){alloc->ptr};
 }
@@ -135,8 +136,8 @@ ExprBuilderAllocBool(ExprStateBuilder *esb)
 static RelNullableDatumArray
 ExprBuilderAllocNullableDatumArray(ExprStateBuilder *esb, int nelems)
 {
-	size_t sz = sizeof(NullableDatum) * nelems;
 	ExprStateAllocation *alloc;
+	size_t sz = sizeof(NullableDatum) * nelems;
 
 	alloc = ExprBuilderAllocInternal(esb, ERP_NULLABLE_DATUM_ARRAY, sz);
 
@@ -146,8 +147,8 @@ ExprBuilderAllocNullableDatumArray(ExprStateBuilder *esb, int nelems)
 static RelNullableDatumArray
 ExprBuilderAllocNullableDatumArrayInit(ExprStateBuilder *esb, int nelems, NullableDatum **elements)
 {
-	size_t sz = sizeof(NullableDatum) * nelems;
 	ExprStateAllocation *alloc;
+	size_t sz = sizeof(NullableDatum) * nelems;
 
 	alloc = ExprBuilderAllocInternal(esb, ERP_NULLABLE_DATUM_ARRAY, sz);
 
@@ -162,7 +163,7 @@ static RelFunctionCallInfo
 ExprBuilderAllocFunctionCallInfo(ExprStateBuilder *esb, int nargs, FunctionCallInfo *ptr)
 {
 	ExprStateAllocation *alloc;
-	Size sz = SizeForFunctionCallInfo(nargs);
+	size_t sz = SizeForFunctionCallInfo(nargs);
 
 	alloc = ExprBuilderAllocInternal(esb, ERP_FUNCTIONCALLINFO, sz);
 
