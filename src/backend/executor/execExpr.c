@@ -3682,7 +3682,6 @@ ExecBuildAggTrans(AggState *aggstate, AggStatePerPhase phase,
 		trans_fcinfo_rel =
 			ExprBuilderAllocFunctionCallInfo(&esb, numTransArgs,
 											 &trans_fcinfo);
-		/* XXX pertrans->transfn = ExprBuilderAllocFmgrInfoInit(&esb, &trans_finfo); */
 		InitFunctionCallInfoData(*trans_fcinfo,
 								 &pertrans->transfn,
 								 numTransArgs,
@@ -3742,8 +3741,8 @@ ExecBuildAggTrans(AggState *aggstate, AggStatePerPhase phase,
 			}
 			else
 			{
-				RelFunctionCallInfo ds_fcinfo_rel;
 				FunctionCallInfo ds_fcinfo;
+				RelFunctionCallInfo ds_fcinfo_rel;
 				FmgrInfo *ds_finfo;
 				AggStatePerCallContext *percall;
 
@@ -3775,7 +3774,7 @@ ExecBuildAggTrans(AggState *aggstate, AggStatePerPhase phase,
 				 * Don't call a strict deserialization function with NULL
 				 * input
 				 */
-				if (ds_finfo->fn_strict)
+				if (pertrans->deserialfn.fn_strict)
 					scratch.opcode = EEOP_AGG_STRICT_DESERIALIZE;
 				else
 					scratch.opcode = EEOP_AGG_DESERIALIZE;
@@ -3783,7 +3782,6 @@ ExecBuildAggTrans(AggState *aggstate, AggStatePerPhase phase,
 				scratch.d.agg_deserialize.fn_addr =
 					pertrans->deserialfn.fn_addr;
 
-				//scratch.d.agg_deserialize.finfo = pertrans->deserialfn;
 				scratch.d.agg_deserialize.fcinfo_data = ds_fcinfo_rel;
 				scratch.d.agg_deserialize.jumpnull = -1;	/* adjust later */
 				scratch.result = RelFCIIdx(trans_fcinfo_rel, argno + 1);

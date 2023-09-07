@@ -102,7 +102,7 @@ extern void llvm_copy_attributes(LLVMValueRef from, LLVMValueRef to);
 extern LLVMValueRef llvm_function_reference(LLVMJitContext *context,
 						LLVMBuilderRef builder,
 						LLVMModuleRef mod,
-						FmgrInfo *finfo);
+						FunctionCallInfo fcinfo);
 
 extern void llvm_inline(LLVMModuleRef mod);
 

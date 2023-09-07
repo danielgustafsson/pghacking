@@ -509,13 +509,13 @@ llvm_copy_attributes(LLVMValueRef v_from, LLVMValueRef v_to)
 }
 
 /*
- * Return a callable LLVMValueRef for flinfo.
+ * Return a callable LLVMValueRef for fcinfo.
  */
 LLVMValueRef
 llvm_function_reference(LLVMJitContext *context,
 						LLVMBuilderRef builder,
 						LLVMModuleRef mod,
-						FmgrInfo *flinfo)
+						FunctionCallInfo fcinfo)
 {
 	char	   *modname;
 	char	   *basename;
@@ -523,7 +523,7 @@ llvm_function_reference(LLVMJitContext *context,
 
 	LLVMValueRef v_fn;
 
-	fmgr_symbol(flinfo->fn_oid, &modname, &basename);
+	fmgr_symbol(fcinfo->flinfo->fn_oid, &modname, &basename);
 
 	if (modname != NULL && basename != NULL)
 	{
@@ -545,12 +545,12 @@ llvm_function_reference(LLVMJitContext *context,
 		LLVMValueRef v_fn_addr;
 
 		funcname = psprintf("pgoidextern.%u",
-							flinfo->fn_oid);
+							fcinfo->flinfo->fn_oid);
 		v_fn = LLVMGetNamedGlobal(mod, funcname);
 		if (v_fn != 0)
 			return LLVMBuildLoad(builder, v_fn, "");
 
-		v_fn_addr = l_ptr_const(flinfo->fn_addr, TypePGFunction);
+		v_fn_addr = l_ptr_const(fcinfo->flinfo->fn_addr, TypePGFunction);
 
 		v_fn = LLVMAddGlobal(mod, TypePGFunction, funcname);
 		LLVMSetInitializer(v_fn, v_fn_addr);

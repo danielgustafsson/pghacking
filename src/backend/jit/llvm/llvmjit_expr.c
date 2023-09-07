@@ -129,7 +129,7 @@ static LLVMValueRef expr_opp(ExprCompileState *ecs, int opno);
 static LLVMValueRef expr_opdatap(ExprCompileState *ecs, int opno);
 
 static LLVMValueRef BuildV1CallFC(ExprCompileState *ecs,
-								  FmgrInfo *finfo,
+								  FunctionCallInfo fcinfo,
 								  LLVMValueRef v_fcinfo,
 								  LLVMValueRef *v_fcinfo_isnull);
 static LLVMValueRef build_EvalXFuncInt(ExprCompileState *ecs,
@@ -773,7 +773,7 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 						LLVMPositionBuilderAtEnd(b, b_nonull);
 					}
 
-					v_retval = BuildV1CallFC(&ecs, &finfo, v_fcinfo,
+					v_retval = BuildV1CallFC(&ecs, finfo, v_fcinfo,
 											 &v_fcinfo_isnull);
 					LLVMBuildStore(b, v_retval, v_resvaluep);
 					LLVMBuildStore(b, v_fcinfo_isnull, v_resnullp);
@@ -1472,6 +1472,8 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 				{
 					FunctionCallInfo fcinfo_out,
 								fcinfo_in;
+					FmgrInfo finfo_out;
+					FmgrInfo finfo_in;
 					LLVMValueRef v_fn_out,
 								v_fn_in;
 					LLVMValueRef v_fcinfo_out,
@@ -1505,8 +1507,8 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 												"op.%d.%s.inputcall",
 												opno, opcode_name);
 
-					v_fn_out = llvm_function_reference(ecs.context, b, ecs.mod, &fcinfo_out);
-					v_fn_in = llvm_function_reference(ecs.context, b, ecs.mod, &fcinfo_in);
+					v_fn_out = llvm_function_reference(ecs.context, b, ecs.mod, fcinfo_out);
+					v_fn_in = llvm_function_reference(ecs.context, b, ecs.mod, fcinfo_in);
 
 					v_fcinfo_in_isnullp =
 						LLVMBuildStructGEP(b, v_fcinfo_in,
@@ -1694,7 +1696,7 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 					/* neither argument is null: compare */
 					LLVMPositionBuilderAtEnd(b, b_noargnull);
 
-					v_result = BuildV1CallFC(&ecs, &finfo, v_fcinfo,
+					v_result = BuildV1CallFC(&ecs, finfo, v_fcinfo,
 											 &v_fcinfo_isnull);
 
 					if (opcode == EEOP_DISTINCT)
@@ -1773,7 +1775,7 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 					/* build block to invoke function and check result */
 					LLVMPositionBuilderAtEnd(b, b_nonull);
 
-					v_retval = BuildV1CallFC(&ecs, &finfo, v_fcinfo,
+					v_retval = BuildV1CallFC(&ecs, finfo, v_fcinfo,
 											 &v_fcinfo_isnull);
 
 					/*
@@ -1949,7 +1951,7 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 					LLVMPositionBuilderAtEnd(b, b_compare);
 
 					/* call function */
-					v_retval = BuildV1CallFC(&ecs, &finfo, v_fcinfo,
+					v_retval = BuildV1CallFC(&ecs, finfo, v_fcinfo,
 											 &v_fcinfo_isnull);
 					LLVMBuildStore(b, v_retval, v_resvaluep);
 
@@ -2243,7 +2245,7 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 			case EEOP_AGG_DESERIALIZE:
 				{
 					FunctionCallInfo fcinfo;
-					FmgrInfo *finfo;
+					FmgrInfo finfo;
 
 					LLVMValueRef v_finfo;
 					LLVMValueRef v_fcinfo;
@@ -2393,7 +2395,7 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 			case EEOP_AGG_PLAIN_TRANS_BYREF:
 				{
 					FunctionCallInfo fcinfo;
-					FmgrInfo *finfo;
+					FmgrInfo finfo;
 
 					LLVMValueRef v_finfo;
 					LLVMValueRef v_fcinfo;
@@ -3260,7 +3262,7 @@ expr_opdatap(ExprCompileState *ecs, int opno)
 
 static LLVMValueRef
 BuildV1CallFC(ExprCompileState *ecs,
-			  FmgrInfo *finfo,
+			  FunctionCallInfo fcinfo,
 			  LLVMValueRef v_fcinfo,
 			  LLVMValueRef *v_fcinfo_isnull)
 {
@@ -3268,7 +3270,7 @@ BuildV1CallFC(ExprCompileState *ecs,
 	LLVMValueRef v_fcinfo_isnullp;
 	LLVMValueRef v_retval;
 
-	v_fn = llvm_function_reference(ecs->context, ecs->b, ecs->mod, finfo);
+	v_fn = llvm_function_reference(ecs->context, ecs->b, ecs->mod, fcinfo);
 
 	v_fcinfo_isnullp = LLVMBuildStructGEP(ecs->b, v_fcinfo,
 										  FIELDNO_FUNCTIONCALLINFODATA_ISNULL,
