@@ -2516,7 +2516,7 @@ ExecInitExprRec(ExprStateBuilder *esb, Expr *node, RelNullableDatum result)
 						 ctor->type == JSCTOR_JSON_SERIALIZE)
 				{
 					/* Use the value of the first argument as result */
-					ExecInitExprRec(linitial(args), state, resv, resnull);
+					ExecInitExprRec(esb, linitial(args), result);
 				}
 				else
 				{

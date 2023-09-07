@@ -3481,7 +3481,6 @@ ExecEvalFieldStoreDeForm(ExprState *state, const ExprEvalStep *op, ExprContext *
 		Datum		tupDatum = opres->value;
 		HeapTupleHeader tuphdr;
 		HeapTupleData tmptup;
-		TupleDesc	tupDesc;
 
 		tuphdr = DatumGetHeapTupleHeader(tupDatum);
 		tmptup.t_len = HeapTupleHeaderGetDatumLength(tuphdr);
@@ -4257,6 +4256,7 @@ ExecEvalJsonConstructor(ExprState *state, const ExprEvalStep *op,
 	JsonConstructorExprState *jcstate = op->d.json_constructor.jcstate;
 	JsonConstructorExpr *ctor = jcstate->constructor;
 	bool		is_jsonb = ctor->returning->format->format_type == JS_FORMAT_JSONB;
+	bool		isnull = false;
 
 	if (ctor->type == JSCTOR_JSON_ARRAY)
 		res = (is_jsonb ?
@@ -4273,14 +4273,14 @@ ExecEvalJsonConstructor(ExprState *state, const ExprEvalStep *op,
 										  jcstate->constructor->unique);
 	else if (ctor->type == JSCTOR_JSON_SCALAR)
 	{
-		if (jcstate->arg_nulls[0])
+		if (arg_values[0].isnull)
 		{
 			res = (Datum) 0;
 			isnull = true;
 		}
 		else
 		{
-			Datum		value = jcstate->arg_values[0];
+			Datum		value = arg_values[0].value;
 			Oid			outfuncid = jcstate->arg_type_cache[0].outfuncid;
 			JsonTypeCategory category = (JsonTypeCategory)
 				jcstate->arg_type_cache[0].category;
@@ -4293,14 +4293,14 @@ ExecEvalJsonConstructor(ExprState *state, const ExprEvalStep *op,
 	}
 	else if (ctor->type == JSCTOR_JSON_PARSE)
 	{
-		if (jcstate->arg_nulls[0])
+		if (arg_values[0].isnull)
 		{
 			res = (Datum) 0;
 			isnull = true;
 		}
 		else
 		{
-			Datum		value = jcstate->arg_values[0];
+			Datum		value = arg_values[0].value;
 			text	   *js = DatumGetTextP(value);
 
 			if (is_jsonb)
@@ -4316,7 +4316,7 @@ ExecEvalJsonConstructor(ExprState *state, const ExprEvalStep *op,
 		elog(ERROR, "invalid JsonConstructorExpr type %d", ctor->type);
 
 	opres->value = res;
-	opres->isnull = false;
+	opres->isnull = isnull;
 }
 
 /*
