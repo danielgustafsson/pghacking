@@ -470,7 +470,7 @@ llvm_compile_expr(ExprState *state, ExprStateBuilder *esb)
 												tts_ops,
 												op->d.fetch.last_var);
 						INSTR_TIME_SET_CURRENT(deform_endtime);
-						INSTR_TIME_ACCUM_DIFF(context->base.instr.deform_counter,
+						INSTR_TIME_ACCUM_DIFF(ecs.context->base.instr.deform_counter,
 											  deform_endtime, deform_starttime);
 					}
 
