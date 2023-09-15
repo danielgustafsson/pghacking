@@ -2572,6 +2572,7 @@ ExecInitExprRec(ExprStateBuilder *esb, Expr *node, RelNullableDatum result)
 						bool		is_jsonb =
 							ctor->returning->format->format_type == JS_FORMAT_JSONB;
 
+						// XXX: need a relative allocation?
 						jcstate->arg_type_cache =
 							palloc(sizeof(*jcstate->arg_type_cache) * nargs);
 

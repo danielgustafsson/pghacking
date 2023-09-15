@@ -475,7 +475,7 @@ typedef struct ExprEvalStep
 			bool		elembyval;	/* is the element type pass-by-value? */
 			char		elemalign;	/* typalign of the element type */
 			bool		multidims;	/* is array expression multi-D? */
-		}			arrayexpr;
+	}			arrayexpr;
 
 		/* for EEOP_ARRAYCOERCE_(RELABEL|UNPACK|PACK) */
 		struct
